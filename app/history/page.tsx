@@ -203,24 +203,28 @@ export default function HistoryPage() {
             <MonthSummary buckets={[...dayMap.values()]} />
 
             <div className="mt-5 overflow-hidden rounded-xl border border-white/[0.06]">
-              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_80px] bg-[#0f1117] text-center text-xs font-semibold text-slate-500">
+              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_56px] bg-[#0f1117] text-center text-[10px] font-semibold text-slate-500 sm:grid-cols-[repeat(7,minmax(0,1fr))_72px] sm:text-xs lg:grid-cols-[repeat(7,minmax(0,1fr))_80px]">
                 {weekdays.map((day) => <div key={day} className="px-1 py-3">{day}</div>)}
-                <div className="px-1 py-3 text-amber-400">주간</div>
+                <div className="w-14 px-1 py-3 text-amber-400 sm:w-[72px] lg:w-20">주간</div>
               </div>
               {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(0,1fr))_80px] border-t border-white/[0.06]">
+                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(0,1fr))_56px] border-t border-white/[0.06] sm:grid-cols-[repeat(7,minmax(0,1fr))_72px] lg:grid-cols-[repeat(7,minmax(0,1fr))_80px]">
                   {week.days.map((day) => {
                     const bucket = day.date ? dayMap.get(day.date) : undefined
                     const tone = !bucket ? 'bg-[#151926] text-slate-600' : bucket.pnl >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
                     return (
-                      <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`min-h-24 border-r border-white/[0.04] p-2 text-left ${tone}`}>
-                        <div className="text-xs font-semibold">{day.label}</div>
-                        {bucket && <div className="mt-3 break-words font-mono text-sm font-bold">{formatSigned(bucket.pnl)}</div>}
+                      <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`min-h-[60px] min-w-0 border-r border-white/[0.04] p-1.5 text-left sm:min-h-20 sm:p-2 lg:min-h-24 ${tone}`}>
+                        <div className="text-[10px] font-semibold sm:text-xs">{day.label}</div>
+                        {bucket && (
+                          <div className="mt-2 min-w-0 truncate whitespace-nowrap break-normal font-mono text-[10px] font-bold leading-tight sm:mt-3 sm:text-xs lg:text-sm">
+                            {formatSigned(bucket.pnl)}
+                          </div>
+                        )}
                       </button>
                     )
                   })}
-                  <div className={`flex min-h-24 items-center justify-center p-2 text-center font-mono text-sm font-bold ${week.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {formatSigned(week.pnl)}
+                  <div className={`flex min-h-[60px] w-14 min-w-0 items-center justify-center p-1 text-center font-mono text-[10px] font-bold sm:min-h-20 sm:w-[72px] sm:text-xs lg:min-h-24 lg:w-20 lg:text-sm ${week.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className="min-w-0 truncate whitespace-nowrap break-normal">{formatSigned(week.pnl)}</span>
                   </div>
                 </div>
               ))}
