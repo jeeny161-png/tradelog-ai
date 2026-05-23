@@ -200,38 +200,67 @@ export default function HistoryPage() {
 
             <MonthSummary buckets={[...dayMap.values()]} />
 
-            <div className="mt-5 overflow-x-auto rounded-xl border border-[#1a1f2e]">
-              <div className="min-w-[720px]">
-              <div className="grid grid-cols-[repeat(7,minmax(86px,1fr))_86px] bg-[#0f1117] text-center text-[11px] font-semibold text-slate-500 sm:grid-cols-[repeat(7,minmax(96px,1fr))_96px] sm:text-xs lg:grid-cols-[repeat(7,minmax(0,1fr))_112px]">
-                {['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'].map((day) => <div key={day} className="border-r border-[#1a1f2e] px-1 py-3 last:border-r-0">{day}</div>)}
-                <div className="px-1 py-3 text-amber-400">주간 합계</div>
+            <div className="mt-5 rounded-xl border border-[#1a1f2e]">
+              {/* Header row — short names on mobile, full on sm+ */}
+              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_48px] bg-[#0f1117] text-center text-[10px] font-semibold text-slate-500 sm:grid-cols-[repeat(7,minmax(0,1fr))_96px] sm:text-xs">
+                {[
+                  ['일', '일요일'],
+                  ['월', '월요일'],
+                  ['화', '화요일'],
+                  ['수', '수요일'],
+                  ['목', '목요일'],
+                  ['금', '금요일'],
+                  ['토', '토요일'],
+                ].map(([short, full]) => (
+                  <div key={full} className="border-r border-[#1a1f2e] px-1 py-2.5 sm:py-3">
+                    <span className="sm:hidden">{short}</span>
+                    <span className="hidden sm:inline">{full}</span>
+                  </div>
+                ))}
+                <div className="px-1 py-2.5 text-amber-400 sm:py-3">
+                  <span className="sm:hidden">합</span>
+                  <span className="hidden sm:inline">주간 합계</span>
+                </div>
               </div>
+
               {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(86px,1fr))_86px] border-t border-[#1a1f2e] sm:grid-cols-[repeat(7,minmax(96px,1fr))_96px] lg:grid-cols-[repeat(7,minmax(0,1fr))_112px]">
+                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(0,1fr))_48px] border-t border-[#1a1f2e] sm:grid-cols-[repeat(7,minmax(0,1fr))_96px]">
                   {week.days.map((day) => {
                     const bucket = day.date ? dayMap.get(day.date) : undefined
                     const isToday = day.date === new Date().toISOString().slice(0, 10)
                     return (
-                      <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`relative min-h-[70px] min-w-0 border-r border-[#1a1f2e] bg-[#0f1117] p-2 text-left transition-colors hover:bg-[#151926] sm:min-h-24 sm:p-3 ${isToday ? 'ring-1 ring-inset ring-amber-500/30' : ''}`}>
-                        <div className="flex min-w-0 items-center gap-1 text-[10px] font-semibold text-slate-500 sm:text-xs">
+                      <button
+                        key={day.key}
+                        disabled={!day.date}
+                        onClick={() => bucket && setSelectedDay(bucket)}
+                        className={`flex min-h-[54px] min-w-0 flex-col border-r border-[#1a1f2e] bg-[#0f1117] p-1 transition-colors hover:bg-[#151926] sm:min-h-[72px] sm:p-2 lg:min-h-24 lg:p-3 ${isToday ? 'ring-1 ring-inset ring-amber-500/30' : ''}`}
+                      >
+                        {/* Date number — top-left, always visible */}
+                        <div className="flex min-w-0 shrink-0 items-center gap-0.5 text-[10px] font-semibold text-slate-500 sm:text-xs">
                           <span>{day.label}</span>
-                          {bucket?.trades.some((trade) => trade.mt5_ticket) && <span className="text-amber-400">⇌</span>}
+                          {bucket?.trades.some((t) => t.mt5_ticket) && <span className="text-amber-400 sm:text-[8px]">⇌</span>}
                         </div>
+                        {/* PnL — fills remaining space, centered */}
                         {bucket && (
-                          <div className={`absolute inset-x-2 top-1/2 -translate-y-1/2 truncate whitespace-nowrap break-normal text-center font-mono text-base font-bold leading-none sm:text-xl lg:text-2xl ${bucket.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                            {formatSigned(bucket.pnl)}
+                          <div className={`flex flex-1 items-center justify-center overflow-hidden font-mono font-bold leading-none ${bucket.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                            <span className="w-full truncate text-center text-[9px] sm:text-xs lg:text-sm">
+                              {formatSigned(bucket.pnl)}
+                            </span>
                           </div>
                         )}
                       </button>
                     )
                   })}
-                  <div className="flex min-h-[70px] min-w-0 flex-col items-center justify-center border-r border-[#1a1f2e] bg-[#0f1117] p-2 text-center sm:min-h-24">
-                    <div className="text-xs font-semibold text-slate-500">W{weekIndex + 1}</div>
-                    <span className={`mt-2 max-w-full truncate whitespace-nowrap break-normal font-mono text-xs font-bold sm:text-sm ${week.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>{formatSigned(week.pnl)}</span>
+
+                  {/* Weekly summary cell */}
+                  <div className="flex min-h-[54px] min-w-0 flex-col items-center justify-center bg-[#0f1117] p-1 text-center sm:min-h-[72px] lg:min-h-24">
+                    <div className="text-[9px] font-semibold text-slate-500 sm:text-xs">W{weekIndex + 1}</div>
+                    <span className={`mt-1 w-full truncate text-center font-mono text-[9px] font-bold sm:text-xs ${week.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
+                      {formatSigned(week.pnl)}
+                    </span>
                   </div>
                 </div>
               ))}
-              </div>
             </div>
           </section>
         )}
