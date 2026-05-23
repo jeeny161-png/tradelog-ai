@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  console.log('[middleware] path:', request.nextUrl.pathname)
+export async function proxy(request: NextRequest) {
+  console.log('[proxy] path:', request.nextUrl.pathname)
   const response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -21,10 +21,10 @@ export async function middleware(request: NextRequest) {
   )
 
   const cookies = request.cookies.getAll()
-  console.log('[middleware] cookies:', cookies.map(c => c.name))
+  console.log('[proxy] cookies:', cookies.map(c => c.name))
 
   const { data: { user }, error } = await supabase.auth.getUser()
-  console.log('[middleware] user:', user?.id ?? null, '| error:', error?.message ?? null)
+  console.log('[proxy] user:', user?.id ?? null, '| error:', error?.message ?? null)
 
   const publicPaths = ['/login', '/logout', '/api/logout']
   if (!user && !publicPaths.includes(request.nextUrl.pathname)) {
