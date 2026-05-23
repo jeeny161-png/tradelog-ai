@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { LanguageToggle, useLanguage } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 
 type Trade = {
@@ -24,9 +25,8 @@ type CalendarDay = {
   inMonth: boolean
 }
 
-const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 export default function CalendarPage() {
+  const { language, setLanguage, t } = useLanguage()
   const [monthCursor, setMonthCursor] = useState(() => startOfMonth(new Date()))
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,11 +106,11 @@ export default function CalendarPage() {
         <nav className="flex-1 space-y-0.5 px-3 py-4">
           <Link href="/" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span>□</span>
-            Dashboard
+            {t.dashboard}
           </Link>
           <Link href="/calendar" className="flex min-h-11 items-center gap-3 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-400">
             <span>◫</span>
-            Calendar
+            {t.calendar}
           </Link>
         </nav>
       </aside>
@@ -126,43 +126,49 @@ export default function CalendarPage() {
           </div>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-slate-100">PnL Calendar</h1>
-              <p className="mt-0.5 text-sm text-slate-500">Daily and weekly trading performance by month.</p>
+              <h1 className="text-xl font-semibold text-slate-100">{t.pnlCalendar}</h1>
+              <p className="mt-0.5 text-sm text-slate-500">{t.calendarSubtitle}</p>
             </div>
             <div className="flex items-center gap-2">
+              <div className="hidden sm:block">
+                <LanguageToggle language={language} setLanguage={setLanguage} />
+              </div>
               <button onClick={() => setMonthCursor(addMonths(monthCursor, -1))} className="min-h-11 rounded-lg border border-white/[0.08] bg-[#1a1f2e] px-4 text-sm text-slate-300 transition-colors hover:bg-white/[0.04]">
-                Previous
+                {t.previous}
               </button>
               <button onClick={() => setMonthCursor(startOfMonth(new Date()))} className="min-h-11 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20">
-                Today
+                {t.today}
               </button>
               <button onClick={() => setMonthCursor(addMonths(monthCursor, 1))} className="min-h-11 rounded-lg border border-white/[0.08] bg-[#1a1f2e] px-4 text-sm text-slate-300 transition-colors hover:bg-white/[0.04]">
-                Next
+                {t.next}
               </button>
             </div>
+          </div>
+          <div className="mt-4 sm:hidden">
+            <LanguageToggle language={language} setLanguage={setLanguage} />
           </div>
         </header>
 
         <section className="px-4 py-5 sm:px-6 lg:px-8">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">{monthCursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h2>
-            <span className="text-sm text-slate-500">{loading ? 'Loading trades...' : `${trades.length} trades this month`}</span>
+            <h2 className="text-lg font-semibold text-slate-100">{monthCursor.toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US', { month: 'long', year: 'numeric' })}</h2>
+            <span className="text-sm text-slate-500">{loading ? t.loadingTrades : `${trades.length} ${t.tradesThisMonth}`}</span>
           </div>
 
           <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <SummaryCard label="Total PnL" value={formatPnl(totalPnl)} positive={totalPnl >= 0} />
-            <SummaryCard label="Win Rate" value={`${winRate}%`} positive={winRate >= 50} />
-            <SummaryCard label="Trading Days" value={tradingDays.toLocaleString()} />
-            <SummaryCard label="Best Day" value={bestDay ? `${shortDate(bestDay[0])} ${formatPnl(bestDay[1])}` : '-'} positive />
-            <SummaryCard label="Worst Day" value={worstDay ? `${shortDate(worstDay[0])} ${formatPnl(worstDay[1])}` : '-'} positive={false} />
+            <SummaryCard label={t.totalPnl} value={formatPnl(totalPnl)} positive={totalPnl >= 0} />
+            <SummaryCard label={t.winRate} value={`${winRate}%`} positive={winRate >= 50} />
+            <SummaryCard label={t.tradingDays} value={tradingDays.toLocaleString()} />
+            <SummaryCard label={t.bestDay} value={bestDay ? `${shortDate(bestDay[0])} ${formatPnl(bestDay[1])}` : '-'} positive />
+            <SummaryCard label={t.worstDay} value={worstDay ? `${shortDate(worstDay[0])} ${formatPnl(worstDay[1])}` : '-'} positive={false} />
           </div>
 
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#1a1f2e]">
             <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_72px] border-b border-white/[0.06] bg-[#111522] sm:grid-cols-[repeat(7,minmax(0,1fr))_110px]">
-              {dayLabels.map((day) => (
+              {t.dayLabels.map((day) => (
                 <div key={day} className="px-1 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">{day}</div>
               ))}
-              <div className="px-1 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">Week</div>
+              <div className="px-1 py-3 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 sm:text-xs">{t.week}</div>
             </div>
 
             {weeks.map((week, weekIndex) => {
@@ -203,20 +209,20 @@ export default function CalendarPage() {
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-100">{selectedDate}</h2>
-                <p className="mt-1 text-sm text-slate-500">{selectedTrades.length} trades · {formatPnl(selectedTrades.reduce((sum, trade) => sum + trade.pnl, 0))}</p>
+                <p className="mt-1 text-sm text-slate-500">{selectedTrades.length} {t.trades} · {formatPnl(selectedTrades.reduce((sum, trade) => sum + trade.pnl, 0))}</p>
               </div>
               <button onClick={() => setSelectedDate(null)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]">X</button>
             </div>
 
             <div className="space-y-3">
               {selectedTrades.length === 0 ? (
-                <div className="rounded-xl border border-white/[0.06] bg-[#0f1117] p-6 text-center text-sm text-slate-500">No trades on this date.</div>
+                <div className="rounded-xl border border-white/[0.06] bg-[#0f1117] p-6 text-center text-sm text-slate-500">{t.noTradesOnDate}</div>
               ) : selectedTrades.map((trade) => (
                 <div key={trade.id} className="rounded-xl border border-white/[0.06] bg-[#0f1117] p-4">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="break-words text-sm font-semibold text-slate-100">{trade.symbol}</div>
-                      <div className="mt-1 break-words text-xs text-slate-500">{trade.direction === 'L' ? 'Long' : 'Short'} · {trade.quantity} lot · {trade.emotion}</div>
+                      <div className="mt-1 break-words text-xs text-slate-500">{trade.direction === 'L' ? t.long : t.short} · {trade.quantity} lot · {trade.emotion}</div>
                     </div>
                     <div className={`shrink-0 break-all text-right font-mono text-sm font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {formatPnl(trade.pnl)}
@@ -224,11 +230,11 @@ export default function CalendarPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
                     <div className="rounded-lg bg-white/[0.03] p-3">
-                      <div>Entry</div>
+                      <div>{t.entry}</div>
                       <div className="mt-1 break-all font-mono text-slate-300">{trade.entry_price}</div>
                     </div>
                     <div className="rounded-lg bg-white/[0.03] p-3">
-                      <div>Exit</div>
+                      <div>{t.exit}</div>
                       <div className="mt-1 break-all font-mono text-slate-300">{trade.exit_price}</div>
                     </div>
                   </div>

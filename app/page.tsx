@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
+import { LanguageToggle, useLanguage } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 
 type Trade = {
@@ -38,6 +39,7 @@ async function uploadChart(file: File, uid: string): Promise<string | null> {
 }
 
 export default function Home() {
+  const { language, setLanguage, t } = useLanguage()
   const [trades, setTrades] = useState<Trade[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -79,15 +81,20 @@ export default function Home() {
     setProfile(data as Profile)
   }, [])
 
-  const checkShareStatus = useCallback(async (uid: string) => {
-    const { data } = await supabase
-      .from('shares')
-      .select('id')
-      .eq('user_id', uid)
-      .eq('status', 'active')
-      .maybeSingle()
+  const checkShareStatus = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
 
-    if (data) setShareStatus('shared')
+    const response = await fetch('/api/shares', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+
+    if (!response.ok) return
+
+    const data = await response.json()
+    setShareStatus(data.shared ? 'shared' : 'idle')
   }, [])
 
   const loadTrades = useCallback(async (uid: string) => {
@@ -109,7 +116,7 @@ export default function Home() {
       if (uid) {
         void loadTrades(uid)
         void loadProfile(uid)
-        void checkShareStatus(uid)
+        void checkShareStatus()
       }
     })
   }, [checkShareStatus, loadProfile, loadTrades])
@@ -169,8 +176,8 @@ export default function Home() {
   }
 
   const saveTrade = async () => {
-    if (!entry || !exit) return alert('Enter both entry and exit prices.')
-    if (!userId) return alert('Please log in first.')
+    if (!entry || !exit) return alert(t.alertPrices)
+    if (!userId) return alert(t.alertLogin)
 
     setLoading(true)
     let chartUrl: string | null | undefined = editingTrade?.chart_image_url
@@ -194,7 +201,7 @@ export default function Home() {
 
     if (editingTrade) {
       const { error } = await supabase.from('trades').update(payload).eq('id', editingTrade.id)
-      if (error) alert(`Update failed: ${error.message}`)
+      if (error) alert(`${t.updateFailed}: ${error.message}`)
       else {
         resetForm()
         await loadTrades(userId)
@@ -205,7 +212,7 @@ export default function Home() {
         user_id: userId,
         date: new Date().toISOString().split('T')[0],
       })
-      if (error) alert(`Save failed: ${error.message}`)
+      if (error) alert(`${t.saveFailed}: ${error.message}`)
       else {
         resetForm()
         await loadTrades(userId)
@@ -217,10 +224,10 @@ export default function Home() {
 
   const handleDeleteClick = async (event: React.MouseEvent, trade: Trade) => {
     event.stopPropagation()
-    if (!confirm(`Delete ${trade.symbol} trade?`)) return
+    if (!confirm(`${t.deleteConfirm} (${trade.symbol})`)) return
 
     const { error } = await supabase.from('trades').delete().eq('id', trade.id)
-    if (error) alert(`Delete failed: ${error.message}`)
+    if (error) alert(`${t.deleteFailed}: ${error.message}`)
     else {
       if (selectedTrade?.id === trade.id) setSelectedTrade(null)
       if (userId) await loadTrades(userId)
@@ -231,35 +238,35 @@ export default function Home() {
     if (!userId || !userEmail || shareStatus === 'loading') return
     setShareStatus('loading')
 
-    if (shareStatus === 'shared') {
-      const { error } = await supabase
-        .from('shares')
-        .delete()
-        .eq('user_id', userId)
-        .eq('status', 'active')
-
-      setShareStatus(error ? 'shared' : 'idle')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      setShareStatus('idle')
       return
     }
 
-    const { error } = await supabase.from('shares').insert({
-      user_id: userId,
-      user_email: userEmail,
-      coach_email: 'jeeny161@gmail.com',
-      status: 'active',
+    const nextAction = shareStatus === 'shared' ? 'unshare' : 'share'
+    const response = await fetch('/api/shares', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ action: nextAction }),
     })
+    const data = await response.json().catch(() => ({}))
 
-    if (error) {
-      alert(`Share failed: ${error.message}`)
-      setShareStatus('idle')
-    } else {
-      setShareStatus('shared')
+    if (!response.ok) {
+      alert(`${t.shareFailed}: ${data.error || response.statusText}`)
+      setShareStatus(nextAction === 'share' ? 'idle' : 'shared')
+      return
     }
+
+    setShareStatus(data.shared ? 'shared' : 'idle')
   }
 
   const analyze = async (trade: Trade) => {
     if (profile.plan === 'free' && profile.ai_credits <= 0) {
-      if (confirm('Free AI analysis credits are used up. Upgrade to Pro?')) {
+      if (confirm(t.creditsUsed)) {
         window.location.href = '/pricing'
       }
       return
@@ -279,7 +286,7 @@ export default function Home() {
       body: JSON.stringify(trade),
     })
     const data = await response.json()
-    setAiResult(data.text || data.error || 'Analysis failed.')
+    setAiResult(data.text || data.error || t.analysisFailed)
     setAiLoading(false)
 
     if (userId) await loadProfile(userId)
@@ -304,23 +311,23 @@ export default function Home() {
         <nav className="flex-1 space-y-0.5 px-3 py-4">
           <button className="flex w-full items-center gap-3 rounded-lg bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-400">
             <span className="text-base">□</span>
-            Dashboard
+            {t.dashboard}
           </button>
           <button onClick={() => scrollTo(formRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-lg">+</span>
-            New Entry
+            {t.newEntry}
           </button>
           <button onClick={() => scrollTo(listRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-base">≡</span>
-            History
+            {t.history}
           </button>
           <Link href="/calendar" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-base">◫</span>
-            Calendar
+            {t.calendar}
           </Link>
           <button onClick={() => scrollTo(coachRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-base">◇</span>
-            Coach
+            {t.coach}
           </button>
         </nav>
 
@@ -328,21 +335,21 @@ export default function Home() {
           {isFree ? (
             <>
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-[11px] text-slate-500">AI credits</span>
+                <span className="text-[11px] text-slate-500">{t.aiCredits}</span>
                 <span className={`text-xs font-bold ${profile.ai_credits <= 3 ? 'text-red-400' : 'text-amber-400'}`}>{profile.ai_credits} / 15</span>
               </div>
               <div className="mb-3 h-1 w-full rounded-full bg-white/[0.06]">
                 <div className="h-1 rounded-full bg-amber-400 transition-all" style={{ width: `${(profile.ai_credits / 15) * 100}%` }} />
               </div>
               <Link href="/pricing" className="block min-h-11 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 py-3 text-center text-xs font-semibold text-black transition-all hover:from-amber-400 hover:to-amber-500">
-                Upgrade Pro
+                {t.upgradePro}
               </Link>
             </>
           ) : (
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="text-xs font-medium text-emerald-400">Pro plan</span>
-              <span className="ml-auto text-[11px] text-slate-500">Unlimited</span>
+              <span className="text-xs font-medium text-emerald-400">{t.proPlan}</span>
+              <span className="ml-auto text-[11px] text-slate-500">{t.unlimited}</span>
             </div>
           )}
         </div>
@@ -358,7 +365,7 @@ export default function Home() {
           )}
           <button onClick={handleLogout} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400">
             <span>↪</span>
-            Logout
+            {t.logout}
           </button>
         </div>
       </aside>
@@ -371,19 +378,25 @@ export default function Home() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-bold text-black">T</div>
                 <span className="text-sm font-semibold text-slate-100">TradeLog AI</span>
               </div>
-              <h1 className="text-xl font-semibold text-slate-100">Dashboard</h1>
-              <p className="mt-0.5 text-sm text-slate-500">Track trades, review behavior, and ask AI for feedback.</p>
+              <h1 className="text-xl font-semibold text-slate-100">{t.dashboard}</h1>
+              <p className="mt-0.5 text-sm text-slate-500">{t.dashboardSubtitle}</p>
             </div>
-            <Link href="/calendar" className="hidden min-h-11 shrink-0 items-center rounded-lg border border-amber-500/30 px-4 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/10 sm:flex">
-              Calendar
-            </Link>
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              <LanguageToggle language={language} setLanguage={setLanguage} />
+              <Link href="/calendar" className="flex min-h-11 items-center rounded-lg border border-amber-500/30 px-4 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/10">
+                {t.calendar}
+              </Link>
+            </div>
+          </div>
+          <div className="mt-4 sm:hidden">
+            <LanguageToggle language={language} setLanguage={setLanguage} />
           </div>
         </header>
 
         <section className="grid grid-cols-2 gap-3 px-4 py-5 sm:px-6 lg:grid-cols-3 lg:gap-4 lg:px-8 lg:py-6">
-          <StatCard label="Total Trades" value={trades.length.toLocaleString()} tone="amber" sublabel="records" />
-          <StatCard label="Win Rate" value={`${winRate}%`} tone={winRate >= 50 ? 'green' : 'red'} sublabel="closed trades" />
-          <StatCard label="Total PnL" value={`${totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString()}`} tone={totalPnl >= 0 ? 'green' : 'red'} sublabel="USD" className="col-span-2 lg:col-span-1" />
+          <StatCard label={t.totalTrades} value={trades.length.toLocaleString()} tone="amber" sublabel={t.records} />
+          <StatCard label={t.winRate} value={`${winRate}%`} tone={winRate >= 50 ? 'green' : 'red'} sublabel={t.closedTrades} />
+          <StatCard label={t.totalPnl} value={`${totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString()}`} tone={totalPnl >= 0 ? 'green' : 'red'} sublabel="USD" className="col-span-2 lg:col-span-1" />
         </section>
 
         <section ref={formRef} className="px-4 pb-6 sm:px-6 lg:px-8">
@@ -391,77 +404,77 @@ export default function Home() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className={`h-4 w-1 rounded-full ${editingTrade ? 'bg-amber-300' : 'bg-amber-400'}`} />
-                <h2 className="text-sm font-semibold text-slate-200">{editingTrade ? `Editing ${editingTrade.symbol}` : 'New Entry'}</h2>
+                <h2 className="text-sm font-semibold text-slate-200">{editingTrade ? `${t.editing} ${editingTrade.symbol}` : t.newEntry}</h2>
               </div>
               {editingTrade && (
                 <button onClick={resetForm} className="min-h-11 rounded-md px-3 text-xs text-slate-500 transition-colors hover:bg-white/[0.04] hover:text-slate-300">
-                  Cancel
+                  {t.cancel}
                 </button>
               )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Symbol">
+              <Field label={t.symbol}>
                 <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className="field-input" />
               </Field>
-              <Field label="Direction">
+              <Field label={t.direction}>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setDirection('L')} className={`min-h-11 rounded-lg text-sm font-medium transition-all ${direction === 'L' ? 'border border-emerald-500/30 bg-emerald-500/20 text-emerald-400' : 'border border-white/[0.08] bg-[#0f1117] text-slate-400 hover:border-white/[0.15]'}`}>
-                    Long
+                    {t.long}
                   </button>
                   <button onClick={() => setDirection('S')} className={`min-h-11 rounded-lg text-sm font-medium transition-all ${direction === 'S' ? 'border border-red-500/30 bg-red-500/20 text-red-400' : 'border border-white/[0.08] bg-[#0f1117] text-slate-400 hover:border-white/[0.15]'}`}>
-                    Short
+                    {t.short}
                   </button>
                 </div>
               </Field>
-              <Field label="Entry Price">
+              <Field label={t.entryPrice}>
                 <input value={entry} onChange={(event) => setEntry(event.target.value)} type="number" placeholder="3300.00" className="field-input" />
               </Field>
-              <Field label="Exit Price">
+              <Field label={t.exitPrice}>
                 <input value={exit} onChange={(event) => setExit(event.target.value)} type="number" placeholder="3320.00" className="field-input" />
               </Field>
-              <Field label="Quantity">
+              <Field label={t.quantity}>
                 <input value={qty} onChange={(event) => setQty(event.target.value)} type="number" step="0.01" min="0.01" className="field-input" />
               </Field>
-              <Field label="Emotion">
+              <Field label={t.emotion}>
                 <select value={emotion} onChange={(event) => setEmotion(event.target.value)} className="field-input">
                   {emotions.map((item) => <option key={item} className="bg-[#1a1f2e]">{item}</option>)}
                 </select>
               </Field>
-              <Field label="Trade Rationale" className="sm:col-span-2">
-                <textarea value={rationale} onChange={(event) => setRationale(event.target.value)} placeholder="Why did you take this trade?" className="field-input min-h-24 resize-none" />
+              <Field label={t.tradeRationale} className="sm:col-span-2">
+                <textarea value={rationale} onChange={(event) => setRationale(event.target.value)} placeholder={t.rationalePlaceholder} className="field-input min-h-24 resize-none" />
               </Field>
-              <Field label="Notes / Review" className="sm:col-span-2">
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What happened? What should you repeat or avoid?" className="field-input min-h-24 resize-none" />
+              <Field label={t.notesReview} className="sm:col-span-2">
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t.notesPlaceholder} className="field-input min-h-24 resize-none" />
               </Field>
             </div>
 
             <div className="mt-4">
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">Chart Image</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">{t.chartImage}</label>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
               {chartPreview ? (
                 <div className="relative">
-                  <img src={chartPreview} alt="Chart preview" className="h-44 w-full rounded-lg border border-white/[0.08] object-cover sm:h-52" />
+                  <img src={chartPreview} alt={t.chartImage} className="h-44 w-full rounded-lg border border-white/[0.08] object-cover sm:h-52" />
                   <button onClick={() => { setChartFile(null); setChartPreview(null); if (fileInputRef.current) fileInputRef.current.value = '' }} className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-sm text-white hover:bg-black/90">
                     X
                   </button>
                 </div>
               ) : (
                 <button onClick={() => fileInputRef.current?.click()} className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-white/[0.12] px-4 text-sm text-slate-500 transition-colors hover:border-amber-500/40 hover:text-amber-400/70">
-                  Upload chart image
+                  {t.uploadChart}
                 </button>
               )}
             </div>
 
             <div className="my-4 flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#0f1117] px-4 py-3">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">Estimated PnL</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{t.estimatedPnl}</span>
               <span className={`break-all text-right font-mono text-lg font-bold ${pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-red-400' : 'text-slate-600'}`}>
                 {pnl !== 0 ? `${pnl > 0 ? '+' : ''}${pnl.toLocaleString()} USD` : '-'}
               </span>
             </div>
 
             <button onClick={saveTrade} disabled={loading} className="min-h-11 w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-3 text-sm font-semibold text-black shadow-lg shadow-amber-500/20 transition-all hover:from-amber-400 hover:to-amber-500 disabled:cursor-not-allowed disabled:opacity-40">
-              {loading ? 'Saving...' : editingTrade ? 'Update Trade' : 'Save Trade'}
+              {loading ? t.saving : editingTrade ? t.updateTrade : t.saveTrade}
             </button>
           </div>
         </section>
@@ -470,11 +483,11 @@ export default function Home() {
           <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-4 sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-slate-200">Coach Access</h2>
-                <p className="mt-1 text-sm text-slate-500">Share your trading journal with your coach for review.</p>
+                <h2 className="text-sm font-semibold text-slate-200">{t.coachAccess}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t.coachSubtitle}</p>
               </div>
               <button onClick={handleShare} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium transition-colors ${shareStatus === 'shared' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.08]'}`}>
-                {shareStatus === 'loading' ? 'Processing...' : shareStatus === 'shared' ? 'Sharing On' : 'Share With Coach'}
+                {shareStatus === 'loading' ? t.processing : shareStatus === 'shared' ? t.sharingOn : t.shareWithCoach}
               </button>
             </div>
           </div>
@@ -483,13 +496,13 @@ export default function Home() {
         <section ref={listRef} className="px-4 pb-10 sm:px-6 lg:px-8">
           <div className="mb-4 flex items-center gap-2.5">
             <div className="h-4 w-1 rounded-full bg-amber-400" />
-            <h2 className="text-sm font-semibold text-slate-200">History</h2>
-            <span className="ml-0.5 text-xs text-slate-600">{trades.length} trades</span>
+            <h2 className="text-sm font-semibold text-slate-200">{t.history}</h2>
+            <span className="ml-0.5 text-xs text-slate-600">{trades.length} {t.trades}</span>
           </div>
 
           <div className="space-y-2">
             {trades.length === 0 ? (
-              <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] px-4 py-8 text-center text-sm text-slate-500">No trades yet.</div>
+              <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] px-4 py-8 text-center text-sm text-slate-500">{t.noTradesYet}</div>
             ) : trades.map((trade) => (
               <div key={trade.id} className="group overflow-hidden rounded-xl border border-white/[0.06] bg-[#1a1f2e] transition-all duration-200 hover:border-white/[0.12]">
                 <button type="button" className="flex w-full min-w-0 cursor-pointer items-center gap-3 p-3 text-left transition-colors hover:bg-white/[0.02] sm:gap-4 sm:p-4" onClick={() => setSelectedTrade(selectedTrade?.id === trade.id ? null : trade)}>
@@ -499,7 +512,7 @@ export default function Home() {
                   <div className="min-w-0 flex-1">
                     <div className="break-words text-sm font-medium text-slate-200">{trade.symbol}</div>
                     <div className="mt-0.5 break-words text-xs text-slate-600">
-                      {trade.date} · {trade.direction === 'L' ? 'Long' : 'Short'} · {trade.quantity} lot · {trade.emotion}
+                      {trade.date} · {trade.direction === 'L' ? t.long : t.short} · {trade.quantity} lot · {trade.emotion}
                     </div>
                   </div>
                   <div className={`shrink-0 break-all text-right font-mono text-sm font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -509,18 +522,18 @@ export default function Home() {
 
                 {selectedTrade?.id === trade.id && (
                   <div className="border-t border-white/[0.06] bg-[#0f1117]/60 px-4 py-4">
-                    {trade.chart_image_url && <img src={trade.chart_image_url} alt="Trade chart" className="mb-4 w-full rounded-lg border border-white/[0.08]" />}
+                    {trade.chart_image_url && <img src={trade.chart_image_url} alt={t.chartImage} className="mb-4 w-full rounded-lg border border-white/[0.08]" />}
                     <div className="mb-4 grid grid-cols-2 gap-2">
-                      <button onClick={() => handleEditClick(trade)} className="min-h-11 rounded-lg bg-amber-500/10 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20">Edit</button>
-                      <button onClick={(event) => void handleDeleteClick(event, trade)} className="min-h-11 rounded-lg bg-red-500/10 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20">Delete</button>
+                      <button onClick={() => handleEditClick(trade)} className="min-h-11 rounded-lg bg-amber-500/10 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20">{t.edit}</button>
+                      <button onClick={(event) => void handleDeleteClick(event, trade)} className="min-h-11 rounded-lg bg-red-500/10 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20">{t.delete}</button>
                     </div>
                     <button onClick={() => analyze(trade)} disabled={aiLoading || (isFree && profile.ai_credits <= 0)} className="mb-4 flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 text-sm font-medium text-amber-400 transition-all hover:bg-amber-500/10 hover:border-amber-500/50 disabled:cursor-not-allowed disabled:opacity-40">
-                      {aiLoading ? 'Analyzing...' : isFree ? `AI Analyze (${profile.ai_credits} left)` : 'AI Analyze'}
+                      {aiLoading ? t.analyzing : isFree ? `${t.aiAnalyze} (${profile.ai_credits} ${t.left})` : t.aiAnalyze}
                     </button>
                     {(trade.rationale || trade.notes) && (
                       <div className="mb-4 space-y-3 rounded-lg border border-white/[0.06] bg-[#0f1117] p-4 text-sm leading-relaxed text-slate-400">
-                        {trade.rationale && <p className="break-words"><span className="font-medium text-slate-300">Rationale:</span> {trade.rationale}</p>}
-                        {trade.notes && <p className="break-words"><span className="font-medium text-slate-300">Notes:</span> {trade.notes}</p>}
+                        {trade.rationale && <p className="break-words"><span className="font-medium text-slate-300">{t.rationale}</span> {trade.rationale}</p>}
+                        {trade.notes && <p className="break-words"><span className="font-medium text-slate-300">{t.notes}</span> {trade.notes}</p>}
                       </div>
                     )}
                     {aiResult && <div className="whitespace-pre-line break-words rounded-lg border border-white/[0.06] bg-[#0f1117] p-4 text-sm leading-relaxed text-slate-400">{aiResult}</div>}
@@ -534,10 +547,10 @@ export default function Home() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-[#111522]/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
         <div className="grid grid-cols-4 gap-1">
-          <MobileTab label="Dashboard" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
-          <MobileTab label="New Entry" onClick={() => scrollTo(formRef)} />
-          <MobileTab label="History" onClick={() => scrollTo(listRef)} />
-          <MobileTab label="Coach" onClick={() => scrollTo(coachRef)} />
+          <MobileTab label={t.dashboard} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
+          <MobileTab label={t.newEntry} onClick={() => scrollTo(formRef)} />
+          <MobileTab label={t.history} onClick={() => scrollTo(listRef)} />
+          <MobileTab label={t.coach} onClick={() => scrollTo(coachRef)} />
         </div>
       </nav>
     </div>
