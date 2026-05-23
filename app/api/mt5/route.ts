@@ -22,7 +22,13 @@ type Mt5Payload = {
 }
 
 export async function POST(req: Request) {
+  const contentType = req.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return NextResponse.json({ error: 'Content-Type must be application/json.' }, { status: 415 })
+  }
+
   const payload = await req.json().catch(() => null) as Mt5Payload | null
+  if (!payload) return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   if (!payload?.api_key) return NextResponse.json({ error: 'api_key is required.' }, { status: 401 })
 
   const supabaseAdmin = getSupabaseAdmin()
