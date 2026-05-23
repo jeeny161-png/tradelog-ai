@@ -57,13 +57,8 @@ export async function POST(req: Request) {
     mt5_raw: payload,
   }
 
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('trades')
-    .upsert(trade, { onConflict: 'mt5_ticket' })
-    .select('*')
-    .single()
-
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+  const { inserted, error: insertError } = await saveMt5Trade(trade)
+  if (insertError || !inserted) return NextResponse.json({ error: insertError?.message || 'Failed to save MT5 trade.' }, { status: 500 })
 
   let aiText = ''
   if (profile.plan === 'pro' || (profile.ai_credits ?? 0) > 0) {
@@ -104,4 +99,36 @@ async function analyzeTrade(trade: Record<string, unknown>) {
     }],
   })
   return message.content[0].type === 'text' ? message.content[0].text : ''
+}
+
+async function saveMt5Trade(trade: Record<string, unknown>) {
+  const supabaseAdmin = getSupabaseAdmin()
+  const ticket = typeof trade.mt5_ticket === 'string' ? trade.mt5_ticket : ''
+
+  if (ticket) {
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from('trades')
+      .select('id')
+      .eq('mt5_ticket', ticket)
+      .maybeSingle()
+
+    if (lookupError) return { inserted: null, error: lookupError }
+
+    if (existing?.id) {
+      const { data, error } = await supabaseAdmin
+        .from('trades')
+        .update(trade)
+        .eq('id', existing.id)
+        .select('*')
+        .single()
+      return { inserted: data, error }
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('trades')
+    .insert(trade)
+    .select('*')
+    .single()
+  return { inserted: data, error }
 }
