@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import Script from 'next/script'
 import { supabase } from '@/lib/supabase'
@@ -24,15 +25,11 @@ export default function PricingPage() {
   const [plan, setPlan] = useState<'free' | 'pro'>('free')
   const [loading, setLoading] = useState(false)
   const [sdkReady, setSdkReady] = useState(false)
-  const [successMsg, setSuccessMsg] = useState('')
+  const successMsg = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('success') === 'true'
+    ? '🎉 Pro 플랜 구독이 완료되었습니다!'
+    : ''
 
   useEffect(() => {
-    // URL 파라미터 확인 (결제 후 리다이렉트)
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('success') === 'true') {
-      setSuccessMsg('🎉 Pro 플랜 구독이 완료되었습니다!')
-    }
-
     supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id || null
       setUserId(uid)
@@ -76,9 +73,9 @@ export default function PricingPage() {
         <div className="relative max-w-4xl mx-auto px-6 py-16">
           {/* Header */}
           <div className="text-center mb-12">
-            <a href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-300 text-sm mb-8 transition-colors">
+            <Link href="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-300 text-sm mb-8 transition-colors">
               ← 대시보드로
-            </a>
+            </Link>
             <h1 className="text-3xl font-bold text-slate-100 mb-3">요금제</h1>
             <p className="text-slate-500">금 트레이딩 실력 향상을 위한 AI 코치</p>
 

@@ -24,3 +24,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@layer components {
+  .field-input {
+    @apply min-h-11 w-full rounded-lg border border-white/[0.08] bg-[#0f1117] px-3 py-3 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/20;
+  }
+}

@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const ADMIN_EMAIL = 'jeeny161@gmail.com'
@@ -35,16 +36,7 @@ export default function AdminPage() {
   const [trades, setTrades] = useState<Trade[]>([])
   const [tradesLoading, setTradesLoading] = useState(false)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const email = data.user?.email || null
-      setUserEmail(email)
-      if (email === ADMIN_EMAIL) loadShares()
-      setLoading(false)
-    })
-  }, [])
-
-  const loadShares = async () => {
+  const loadShares = useCallback(async () => {
     const { data } = await supabase
       .from('shares')
       .select('id, user_id, user_email, created_at')
@@ -52,7 +44,16 @@ export default function AdminPage() {
       .eq('status', 'active')
       .order('created_at', { ascending: false })
     setShares(data || [])
-  }
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const email = data.user?.email || null
+      setUserEmail(email)
+      if (email === ADMIN_EMAIL) void loadShares()
+      setLoading(false)
+    })
+  }, [loadShares])
 
   const loadTrades = async (userId: string, email: string) => {
     setSelectedUserId(userId)
@@ -81,7 +82,7 @@ export default function AdminPage() {
         <div className="text-center">
           <div className="text-2xl mb-2">🚫</div>
           <div className="text-slate-400 text-sm">접근 권한이 없습니다.</div>
-          <a href="/" className="text-amber-400 text-xs mt-3 block hover:underline">홈으로 돌아가기</a>
+          <Link href="/" className="text-amber-400 text-xs mt-3 block hover:underline">홈으로 돌아가기</Link>
         </div>
       </div>
     )
@@ -135,7 +136,7 @@ export default function AdminPage() {
           </div>
 
           <div className="px-4 py-4 border-t border-white/[0.06]">
-            <a href="/" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← 대시보드로</a>
+            <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← 대시보드로</Link>
           </div>
         </aside>
 
