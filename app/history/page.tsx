@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AppShell from '../components/AppShell'
-import { getEmotionLabel, useLanguage } from '@/lib/i18n'
+import { emotionOptions, getEmotionLabel, useLanguage } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 
 type Trade = {
@@ -18,6 +18,10 @@ type Trade = {
   notes: string
   date: string
   chart_image_url?: string | null
+  mt5_ticket?: string | null
+  gross_pnl?: number | null
+  swap?: number | null
+  commission?: number | null
 }
 
 type DayBucket = {
@@ -36,8 +40,15 @@ export default function HistoryPage() {
   const [month, setMonth] = useState(() => new Date())
   const [selectedDay, setSelectedDay] = useState<DayBucket | null>(null)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null)
+  const [editEmotion, setEditEmotion] = useState('Calm')
+  const [editRationale, setEditRationale] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editChartFile, setEditChartFile] = useState<File | null>(null)
+  const [editChartPreview, setEditChartPreview] = useState('')
   const [aiResult, setAiResult] = useState('')
   const [loadingAi, setLoadingAi] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const loadTrades = useCallback(async (uid: string) => {
     const { data } = await supabase
@@ -107,6 +118,35 @@ export default function HistoryPage() {
     setLoadingAi(false)
   }
 
+  const openEdit = (trade: Trade) => {
+    setEditingTrade(trade)
+    setEditEmotion(trade.emotion || 'Calm')
+    setEditRationale(trade.rationale || '')
+    setEditNotes(trade.notes || '')
+    setEditChartFile(null)
+    setEditChartPreview(trade.chart_image_url || '')
+  }
+
+  const saveEdit = async () => {
+    if (!editingTrade || !userId) return
+    setSavingEdit(true)
+    const chartUrl = editChartFile ? await uploadChart(editChartFile, userId) : editChartPreview || null
+    const { error } = await supabase
+      .from('trades')
+      .update({
+        emotion: editEmotion,
+        rationale: editRationale,
+        notes: editNotes,
+        chart_image_url: chartUrl,
+      })
+      .eq('id', editingTrade.id)
+      .eq('user_id', userId)
+    setSavingEdit(false)
+    if (error) return alert(error.message)
+    setEditingTrade(null)
+    await loadTrades(userId)
+  }
+
   const changeMonth = (offset: number) => {
     setMonth(new Date(month.getFullYear(), month.getMonth() + offset, 1))
     setSelectedDay(null)
@@ -132,14 +172,15 @@ export default function HistoryPage() {
                 <div className="flex flex-wrap items-start gap-3">
                   <span className={`rounded-lg px-3 py-2 text-sm font-bold ${trade.direction === 'L' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>{trade.direction}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="break-words font-semibold text-slate-100">{trade.symbol}</div>
+                    <div className="break-words font-semibold text-slate-100">{trade.symbol} {trade.mt5_ticket && <span className="text-xs text-slate-500">MT5</span>}</div>
                     <div className="mt-1 break-words text-sm text-slate-500">{trade.date} · {getEmotionLabel(trade.emotion, language)} · {trade.quantity} lot</div>
                     {(trade.rationale || trade.notes) && <p className="mt-2 line-clamp-2 break-words text-sm text-slate-400">{trade.rationale || trade.notes}</p>}
                   </div>
-                  <div className={`font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{trade.pnl >= 0 ? '+' : ''}{trade.pnl.toLocaleString()}</div>
+                  <div className={`font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSigned(trade.pnl)}</div>
                 </div>
+                <PnlBreakdown trade={trade} />
                 <div className="mt-4 grid grid-cols-4 gap-2">
-                  <button className="min-h-11 rounded-xl bg-white/[0.06] text-sm font-semibold text-slate-300" onClick={() => alert('편집은 홈의 빠른 일지 작성에서 곧 지원됩니다.')}>편집</button>
+                  <button className="min-h-11 rounded-xl bg-white/[0.06] text-sm font-semibold text-slate-300" onClick={() => openEdit(trade)}>편집</button>
                   <button className="min-h-11 rounded-xl bg-red-500/10 text-sm font-semibold text-red-400" onClick={() => void deleteTrade(trade)}>삭제</button>
                   <button className="min-h-11 rounded-xl bg-sky-500/10 text-sm font-semibold text-sky-400" onClick={() => void shareTrade(trade)}>공유</button>
                   <button className="min-h-11 rounded-xl bg-amber-500/10 text-sm font-semibold text-amber-400" onClick={() => void analyzeTrade(trade)}>{loadingAi && selectedTrade?.id === trade.id ? '분석 중' : 'AI'}</button>
@@ -174,12 +215,12 @@ export default function HistoryPage() {
                     return (
                       <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`min-h-24 border-r border-white/[0.04] p-2 text-left ${tone}`}>
                         <div className="text-xs font-semibold">{day.label}</div>
-                        {bucket && <div className="mt-3 break-words font-mono text-sm font-bold">{bucket.pnl >= 0 ? '+' : ''}{bucket.pnl.toLocaleString()}</div>}
+                        {bucket && <div className="mt-3 break-words font-mono text-sm font-bold">{formatSigned(bucket.pnl)}</div>}
                       </button>
                     )
                   })}
                   <div className={`flex min-h-24 items-center justify-center p-2 text-center font-mono text-sm font-bold ${week.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {week.pnl >= 0 ? '+' : ''}{week.pnl.toLocaleString()}
+                    {formatSigned(week.pnl)}
                   </div>
                 </div>
               ))}
@@ -203,11 +244,68 @@ export default function HistoryPage() {
                       <div className="font-semibold text-slate-100">{trade.symbol}</div>
                       <div className="mt-1 text-sm text-slate-500">{trade.direction} · {getEmotionLabel(trade.emotion, language)}</div>
                     </div>
-                    <div className={`font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{trade.pnl >= 0 ? '+' : ''}{trade.pnl.toLocaleString()}</div>
+                    <div className={`font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatSigned(trade.pnl)}</div>
                   </div>
+                  <PnlBreakdown trade={trade} compact />
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingTrade && (
+        <div className="fixed inset-0 z-50 bg-black/60 p-4 lg:p-8" onClick={() => setEditingTrade(null)}>
+          <div className="mx-auto max-h-full max-w-2xl overflow-y-auto rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-5" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100">거래 편집</h3>
+                <p className="mt-1 text-sm text-slate-500">MT5 거래의 가격, 종목, 손익은 잠겨 있고 복기 정보만 수정할 수 있습니다.</p>
+              </div>
+              <button onClick={() => setEditingTrade(null)} className="min-h-11 rounded-xl px-3 text-slate-400">닫기</button>
+            </div>
+
+            <div className="mb-5 grid gap-3 sm:grid-cols-2">
+              <ReadOnlyField label="종목" value={editingTrade.symbol} />
+              <ReadOnlyField label="방향" value={editingTrade.direction} />
+              <ReadOnlyField label="진입가" value={String(editingTrade.entry_price)} />
+              <ReadOnlyField label="청산가" value={String(editingTrade.exit_price)} />
+              <ReadOnlyField label="순손익" value={formatMoney(editingTrade.pnl)} />
+              <ReadOnlyField label="MT5 Ticket" value={editingTrade.mt5_ticket || '-'} />
+            </div>
+
+            <div className="grid gap-4">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-500">감정</span>
+                <select className="field-input" value={editEmotion} onChange={(event) => setEditEmotion(event.target.value)}>
+                  {emotionOptions.map((item) => <option key={item.value} value={item.value}>{item[language]}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-500">매매 근거</span>
+                <textarea className="field-input min-h-28" value={editRationale} onChange={(event) => setEditRationale(event.target.value)} />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-500">메모</span>
+                <textarea className="field-input min-h-28" value={editNotes} onChange={(event) => setEditNotes(event.target.value)} />
+              </label>
+              <label className="flex min-h-20 cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/[0.12] bg-[#0f1117] px-4 text-sm text-slate-400">
+                <input type="file" accept="image/*" className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (!file) return
+                  setEditChartFile(file)
+                  const reader = new FileReader()
+                  reader.onload = (readerEvent) => setEditChartPreview(String(readerEvent.target?.result || ''))
+                  reader.readAsDataURL(file)
+                }} />
+                차트 이미지 업로드
+              </label>
+              {editChartPreview && <img src={editChartPreview} alt="Chart preview" className="max-h-72 w-full rounded-xl object-cover" />}
+            </div>
+
+            <button onClick={saveEdit} disabled={savingEdit} className="mt-5 min-h-11 w-full rounded-xl bg-amber-500 text-sm font-bold text-black hover:bg-amber-400 disabled:opacity-50">
+              {savingEdit ? '저장 중...' : '저장'}
+            </button>
           </div>
         </div>
       )}
@@ -222,10 +320,10 @@ function MonthSummary({ buckets }: { buckets: DayBucket[] }) {
   const worst = [...buckets].sort((a, b) => a.pnl - b.pnl)[0]
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <SummaryCard label="이번 달 PnL" value={`${total >= 0 ? '+' : ''}${total.toLocaleString()}`} tone={total >= 0 ? 'good' : 'bad'} />
+      <SummaryCard label="이번 달 PnL" value={formatSigned(total)} tone={total >= 0 ? 'good' : 'bad'} />
       <SummaryCard label="승률" value={`${winRate}%`} />
       <SummaryCard label="거래일" value={`${buckets.length}일`} />
-      <SummaryCard label="최고 / 최악" value={`${best ? best.pnl.toLocaleString() : 0} / ${worst ? worst.pnl.toLocaleString() : 0}`} />
+      <SummaryCard label="최고 / 최악" value={`${best ? formatSigned(best.pnl) : '$0.00'} / ${worst ? formatSigned(worst.pnl) : '$0.00'}`} />
     </div>
   )
 }
@@ -238,6 +336,50 @@ function SummaryCard({ label, value, tone = 'neutral' }: { label: string; value:
       <div className={`mt-2 break-words font-bold ${color}`}>{value}</div>
     </div>
   )
+}
+
+function PnlBreakdown({ trade, compact = false }: { trade: Trade; compact?: boolean }) {
+  const gross = Number(trade.gross_pnl ?? trade.pnl ?? 0)
+  const swap = Number(trade.swap ?? 0)
+  const commission = Number(trade.commission ?? 0)
+  const net = Number(trade.pnl ?? gross + swap + commission)
+  const fees = swap + commission
+  return (
+    <div className={`${compact ? 'mt-3' : 'mt-4'} rounded-xl bg-[#0f1117] px-3 py-2 text-sm text-slate-400`}>
+      <div className={`font-semibold ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+        순손익 {formatMoney(net)} (수수료 {formatMoney(fees)} 포함)
+      </div>
+      <div className="mt-1 text-xs text-slate-500">총손익 {formatMoney(gross)} · 스왑 {formatMoney(swap)} · 수수료 {formatMoney(commission)}</div>
+    </div>
+  )
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-[#0f1117] p-3">
+      <div className="mb-1 text-xs text-slate-500">🔒 {label}</div>
+      <div className="break-words font-semibold text-slate-200">{value}</div>
+    </div>
+  )
+}
+
+async function uploadChart(file: File, uid: string) {
+  const ext = file.name.split('.').pop() || 'png'
+  const path = `${uid}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from('charts').upload(path, file, { upsert: false })
+  if (error) return null
+  const { data } = supabase.storage.from('charts').getPublicUrl(path)
+  return data.publicUrl
+}
+
+function formatSigned(value: number) {
+  return formatMoney(value)
+}
+
+function formatMoney(value: number) {
+  const numeric = Number(value) || 0
+  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : ''
+  return `${sign}$${Math.abs(numeric).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function buildCalendarWeeks(month: Date, dayMap: Map<string, DayBucket>) {

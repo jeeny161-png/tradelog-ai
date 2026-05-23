@@ -20,6 +20,9 @@ type Trade = {
   notes: string
   date: string
   chart_image_url?: string | null
+  gross_pnl?: number | null
+  swap?: number | null
+  commission?: number | null
 }
 
 type Profile = {
@@ -241,6 +244,7 @@ export default function Home() {
                   </div>
                   <div className={`font-mono font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{trade.pnl >= 0 ? '+' : ''}{trade.pnl.toLocaleString()}</div>
                 </div>
+                <PnlBreakdown trade={trade} />
                 <button onClick={() => void analyze(trade)} className="mt-3 min-h-11 w-full rounded-xl bg-amber-500/10 text-sm font-semibold text-amber-400 hover:bg-amber-500/15">
                   {aiLoading && selectedTrade?.id === trade.id ? '분석 중...' : 'AI 분석'}
                 </button>
@@ -257,6 +261,28 @@ export default function Home() {
       </button>
     </AppShell>
   )
+}
+
+function PnlBreakdown({ trade }: { trade: Trade }) {
+  const gross = Number(trade.gross_pnl ?? trade.pnl ?? 0)
+  const swap = Number(trade.swap ?? 0)
+  const commission = Number(trade.commission ?? 0)
+  const net = Number(trade.pnl ?? gross + swap + commission)
+  const fees = swap + commission
+
+  return (
+    <div className="mt-3 rounded-xl bg-[#151926] px-3 py-2 text-sm text-slate-400">
+      <div className={`font-semibold ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+        순손익 {formatMoney(net)} (수수료 {formatMoney(fees)} 포함)
+      </div>
+      <div className="mt-1 text-xs text-slate-500">총손익 {formatMoney(gross)} · 스왑 {formatMoney(swap)} · 수수료 {formatMoney(commission)}</div>
+    </div>
+  )
+}
+
+function formatMoney(value: number) {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : ''
+  return `${sign}$${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function StatCard({ label, value, sub, tone = 'neutral', className = '' }: { label: string; value: string; sub: string; tone?: 'neutral' | 'good' | 'bad'; className?: string }) {

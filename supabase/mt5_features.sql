@@ -19,7 +19,10 @@ create unique index if not exists profiles_mt5_api_key_idx
 
 alter table public.trades
   add column if not exists mt5_ticket text,
-  add column if not exists mt5_raw jsonb;
+  add column if not exists mt5_raw jsonb,
+  add column if not exists swap numeric default 0,
+  add column if not exists commission numeric default 0,
+  add column if not exists gross_pnl numeric default 0;
 
 create unique index if not exists trades_mt5_ticket_unique_idx
   on public.trades(mt5_ticket)
