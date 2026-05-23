@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react'
 import AppShell from '../components/AppShell'
 import { supabase } from '@/lib/supabase'
 
-type SectionKey = 'goals' | 'mt5' | 'import' | 'help' | 'profile'
+type SectionKey = 'goals' | 'mt5' | 'import' | 'reset' | 'help' | 'profile'
+type ResetAction = 'mt5-trades' | 'all-trades' | 'goals' | 'all-data'
 
 type ParsedTrade = {
   symbol: string
@@ -30,6 +31,10 @@ export default function SettingsPage() {
   const [mt5Status, setMt5Status] = useState('')
   const [parsedTrades, setParsedTrades] = useState<ParsedTrade[]>([])
   const [importMessage, setImportMessage] = useState('')
+  const [resetAction, setResetAction] = useState<ResetAction>('mt5-trades')
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetStatus, setResetStatus] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   const authedFetch = async (method: 'GET' | 'POST') => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -106,12 +111,50 @@ export default function SettingsPage() {
     setParsedTrades([])
   }
 
+  const resetData = async () => {
+    if (resetConfirm !== 'RESET') {
+      setResetStatus('초기화하려면 RESET을 정확히 입력해 주세요.')
+      return
+    }
+
+    const labels: Record<ResetAction, string> = {
+      'mt5-trades': 'MT5 연동 거래 기록',
+      'all-trades': '전체 거래 기록',
+      goals: '목표 설정',
+      'all-data': '전체 거래 기록과 목표 설정',
+    }
+
+    if (!confirm(`${labels[resetAction]}을 초기화할까요? 이 작업은 되돌릴 수 없습니다.`)) return
+
+    setResetting(true)
+    setResetStatus('')
+    const { data: { session } } = await supabase.auth.getSession()
+    const response = await fetch('/api/settings/reset', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ action: resetAction, confirm: resetConfirm }),
+    })
+    const data = await response.json()
+    setResetting(false)
+
+    if (!response.ok) {
+      setResetStatus(data.error || '초기화에 실패했습니다.')
+      return
+    }
+
+    setResetStatus(`초기화 완료: 거래 ${data.deletedTrades || 0}개, 목표 ${data.deletedGoals || 0}개`)
+    setResetConfirm('')
+  }
+
   return (
     <AppShell>
       <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
         <header className="mb-5">
           <h1 className="text-2xl font-bold text-slate-100">설정</h1>
-          <p className="mt-1 text-sm text-slate-500">목표, MT5 연동, 가져오기, 도움말, 프로필을 관리합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">목표, MT5 연동, 가져오기, 초기화, 도움말, 프로필을 관리합니다.</p>
         </header>
 
         <div className="space-y-3">
@@ -190,6 +233,33 @@ export default function SettingsPage() {
             )}
           </Panel>
 
+          <Panel id="reset" open={open} setOpen={setOpen} title="데이터 초기화">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-relaxed text-red-100">
+                초기화는 선택한 데이터를 영구 삭제합니다. MT5 중복 기록을 정리하려면 먼저 MT5 연동 거래만 삭제를 사용하세요.
+              </div>
+              <Field label="초기화 범위">
+                <select className="field-input" value={resetAction} onChange={(event) => setResetAction(event.target.value as ResetAction)}>
+                  <option value="mt5-trades">MT5 연동 거래만 삭제</option>
+                  <option value="all-trades">전체 거래 기록 삭제</option>
+                  <option value="goals">목표 설정 초기화</option>
+                  <option value="all-data">전체 거래 기록 + 목표 설정 초기화</option>
+                </select>
+              </Field>
+              <Field label="확인 문구">
+                <input className="field-input" value={resetConfirm} onChange={(event) => setResetConfirm(event.target.value)} placeholder="RESET" />
+              </Field>
+              <button
+                onClick={() => void resetData()}
+                disabled={resetting || resetConfirm !== 'RESET'}
+                className="min-h-11 rounded-xl bg-red-500 px-5 text-sm font-bold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {resetting ? '초기화 중...' : '선택한 데이터 초기화'}
+              </button>
+              {resetStatus && <p className="text-sm text-slate-300">{resetStatus}</p>}
+            </div>
+          </Panel>
+
           <Panel id="help" open={open} setOpen={setOpen} title="도움말">
             <HelpContent />
           </Panel>
@@ -236,64 +306,35 @@ function Mt5SetupGuide({ apiKey }: { apiKey: string }) {
         <h3 className="text-lg font-bold text-slate-100">MT5 EA Setup Guide</h3>
         <p className="mt-1 text-sm text-slate-500">자세한 설치 방법을 순서대로 따라 하면 MT5 거래가 TradeLog AI에 자동으로 기록됩니다.</p>
       </div>
-
       <SetupStep icon="🔑" title="Step 1: API 키 발급">
         <p>TradeLog AI → 설정 메뉴 → MT5 연동 섹션으로 이동합니다.</p>
         <p>&quot;API 키 발급&quot; 버튼을 클릭하고 생성된 키를 복사합니다.</p>
         <CodeBlock value={apiKey || '설정 페이지에서 API 키 발급 버튼을 클릭하세요'} />
         <WarningBox>API 키는 절대 타인과 공유하지 마세요. 유출이 의심되면 즉시 재발급하세요.</WarningBox>
       </SetupStep>
-
       <SetupStep icon="📥" title="Step 2: EA 파일 다운로드">
         <p>설정 페이지에서 &quot;EA 파일 다운로드&quot; 버튼을 클릭합니다.</p>
         <p><Link href="/TradeLogAI_Bridge.mq5" className="text-amber-400 underline">TradeLogAI_Bridge.mq5</Link> 파일을 저장합니다.</p>
       </SetupStep>
-
       <SetupStep icon="📁" title="Step 3: MT5에 EA 설치">
         <p>MT5를 열고 상단 메뉴 → 파일 → 데이터 폴더 열기를 클릭합니다.</p>
         <p>MQL5 → Experts 폴더에 TradeLogAI_Bridge.mq5 파일을 복사합니다.</p>
         <p>MT5로 돌아와 네비게이터 패널을 새로고침합니다. 단축키는 F5입니다.</p>
         <p>전문가 어드바이저 목록에 TradeLogAI_Bridge가 보이는지 확인합니다.</p>
       </SetupStep>
-
       <SetupStep icon="🌐" title="Step 4: WebRequest URL 허용 설정">
         <p>MT5 상단 메뉴 → 도구 → 옵션을 엽니다.</p>
         <p>&quot;전문가 어드바이저&quot; 탭에서 &quot;다음 URL의 WebRequest 허용&quot; 체크박스를 켭니다.</p>
-        <p>아래 URL을 입력하고 확인을 클릭합니다.</p>
         <CodeBlock value="https://tradelog-ai-one.vercel.app" />
         <WarningBox>여기에는 /api/mt5를 붙이지 않습니다. MT5 허용 URL에는 도메인만 입력하세요.</WarningBox>
       </SetupStep>
-
       <SetupStep icon="📈" title="Step 5: EA를 차트에 적용">
         <p>아무 차트나 엽니다. XAUUSD M1 차트를 권장합니다.</p>
         <p>네비게이터에서 TradeLogAI_Bridge를 더블클릭하거나 차트에 드래그합니다.</p>
-        <p>설정창에서 InpApiKey에 Step 1에서 복사한 API 키를 붙여넣습니다.</p>
-        <p>InpApiUrl이 아래 주소인지 확인합니다.</p>
+        <p>InpApiKey에 API 키를 붙여넣고 InpApiUrl이 아래 주소인지 확인합니다.</p>
         <CodeBlock value="https://tradelog-ai-one.vercel.app/api/mt5" />
         <p>&quot;자동매매 허용&quot; 체크를 켜고 확인을 클릭합니다.</p>
       </SetupStep>
-
-      <SetupStep icon="✅" title="Step 6: 연결 확인">
-        <p>차트 오른쪽 위에 웃는 얼굴 아이콘이 보이는지 확인합니다.</p>
-        <p>MT5 하단 &quot;전문가&quot; 탭에서 &quot;TradeLog AI Bridge started&quot; 메시지를 확인합니다.</p>
-        <p>TradeLog AI 설정 페이지에서 &quot;연결 테스트&quot; 버튼을 클릭합니다.</p>
-      </SetupStep>
-
-      <SetupStep icon="⚡" title="Step 7: 자동 연동 확인">
-        <p>MT5에서 거래가 체결 또는 종료되면 TradeLog AI 기록 탭에 자동으로 일지가 생성됩니다.</p>
-        <p>AI 크레딧이 있거나 Pro 플랜이면 AI 분석도 자동으로 실행됩니다.</p>
-      </SetupStep>
-
-      <details className="rounded-xl border border-red-500/20 bg-red-500/10 p-4">
-        <summary className="cursor-pointer font-bold text-red-200">Troubleshooting</summary>
-        <div className="mt-4 space-y-3 text-sm leading-relaxed text-red-100">
-          <p><strong>얼굴 아이콘이 슬픈 얼굴이면</strong> 자동매매 허용 설정을 확인하세요.</p>
-          <p><strong>&quot;URL not allowed&quot; 오류</strong> Step 4의 WebRequest URL 설정을 확인하세요.</p>
-          <p><strong>일지가 안 생기면</strong> InpApiKey 값이 정확한지 다시 확인하세요.</p>
-          <p><strong>HTML 응답 오류</strong> InpApiUrl이 정확히 아래 주소인지 확인하세요.</p>
-          <CodeBlock value="https://tradelog-ai-one.vercel.app/api/mt5" />
-        </div>
-      </details>
     </section>
   )
 }
@@ -304,12 +345,10 @@ function HelpContent() {
       <div className="grid gap-3 md:grid-cols-2">
         <GuideCard title="시작하기" lines={['회원가입 후 홈에서 첫 일지를 작성합니다.', '종목, 방향, 진입가, 청산가, 수량을 입력합니다.', '기록에서 AI 분석 버튼을 눌러 피드백을 받습니다.']} />
         <GuideCard title="일지 작성 가이드" lines={['매매 근거는 셋업, 추세, 리스크, 진입 이유를 구체적으로 씁니다.', '감정은 진입 당시 상태를 선택합니다.', '차트 이미지는 진입과 청산 위치가 보이게 업로드합니다.']} />
-        <GuideCard title="AI 분석 활용법" lines={['강점과 약점을 분리해서 읽습니다.', '패턴 분석은 시간대, 요일, 감정, 종목별 반복 실수를 찾는 데 씁니다.', '주간 리포트는 다음 주 실행 항목 중심으로 확인합니다.']} />
+        <GuideCard title="AI 분석 활용법" lines={['강점과 약점을 분리해서 읽습니다.', '패턴 분석은 반복 실수를 찾는 데 씁니다.', '주간 리포트는 다음 주 실행 항목 중심으로 확인합니다.']} />
         <GuideCard title="스터디 그룹" lines={['Pro 사용자는 그룹을 만들 수 있습니다.', '초대 코드로 참가하고 멤버 목록을 확인합니다.', 'AI 그룹 패턴 분석으로 공통 실수를 확인합니다.']} />
       </div>
-
       <Mt5SetupGuide apiKey="설정 → MT5 연동 섹션에서 확인" />
-
       <section>
         <h3 className="mb-3 text-lg font-bold text-slate-100">모바일 앱 설치 방법</h3>
         <div className="grid gap-3 md:grid-cols-2">
@@ -334,15 +373,11 @@ function SetupStep({ icon, title, children }: { icon: string; title: string; chi
 }
 
 function CodeBlock({ value }: { value: string }) {
-  return (
-    <pre className="overflow-x-auto rounded-xl border border-white/[0.06] bg-black/30 p-3 text-xs text-amber-200"><code>{value}</code></pre>
-  )
+  return <pre className="overflow-x-auto rounded-xl border border-white/[0.06] bg-black/30 p-3 text-xs text-amber-200"><code>{value}</code></pre>
 }
 
 function WarningBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">{children}</div>
-  )
+  return <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">{children}</div>
 }
 
 function GuideCard({ title, lines }: { title: string; lines: string[] }) {
