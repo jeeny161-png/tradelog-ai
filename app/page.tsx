@@ -426,6 +426,14 @@ export default function Home() {
             <span className="text-base">↑</span>
             가져오기
           </Link>
+          <Link href="/settings" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">S</span>
+            설정
+          </Link>
+          <Link href="/help" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">?</span>
+            도움말
+          </Link>
           <button onClick={() => scrollTo(coachRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-base">◇</span>
             {t.coach}
