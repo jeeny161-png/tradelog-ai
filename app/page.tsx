@@ -19,11 +19,24 @@ type Trade = {
   notes: string
   date: string
   chart_image_url?: string | null
+  share_token?: string | null
 }
 
 type Profile = {
   plan: 'free' | 'pro'
   ai_credits: number
+}
+
+type Goals = {
+  monthly_target: number
+  max_daily_loss: number
+  max_consecutive_losses: number
+}
+
+type PatternInsight = {
+  title: string
+  value: string
+  detail: string
 }
 
 async function uploadChart(file: File, uid: string): Promise<string | null> {
@@ -58,10 +71,15 @@ export default function Home() {
   const [shareStatus, setShareStatus] = useState<'idle' | 'loading' | 'shared'>('idle')
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [goals, setGoals] = useState<Goals | null>(null)
+  const [patternInsights, setPatternInsights] = useState<PatternInsight[]>([])
+  const [patternSummary, setPatternSummary] = useState('')
+  const [patternsLoading, setPatternsLoading] = useState(false)
 
   const formRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const coachRef = useRef<HTMLDivElement>(null)
+  const patternsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadProfile = useCallback(async (uid: string) => {
@@ -105,6 +123,16 @@ export default function Home() {
     setTrades(data || [])
   }, [])
 
+  const loadGoals = useCallback(async (uid: string) => {
+    const { data } = await supabase
+      .from('goals')
+      .select('monthly_target, max_daily_loss, max_consecutive_losses')
+      .eq('user_id', uid)
+      .single()
+
+    setGoals(data as Goals | null)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const uid = data.user?.id || null
@@ -114,10 +142,11 @@ export default function Home() {
       if (uid) {
         void loadTrades(uid)
         void loadProfile(uid)
+        void loadGoals(uid)
         void checkShareStatus()
       }
     })
-  }, [checkShareStatus, loadProfile, loadTrades])
+  }, [checkShareStatus, loadGoals, loadProfile, loadTrades])
 
   const handleLogout = () => {
     supabase.auth.signOut().finally(() => {
@@ -290,9 +319,67 @@ export default function Home() {
     if (userId) await loadProfile(userId)
   }
 
+  const analyzePatterns = async () => {
+    setPatternsLoading(true)
+    setPatternInsights([])
+    setPatternSummary('')
+    const { data: { session } } = await supabase.auth.getSession()
+    const response = await fetch('/api/ai/patterns', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+      },
+    })
+    const data = await response.json()
+    if (!response.ok) alert(data.error || 'Pattern analysis failed.')
+    setPatternInsights(data.insights || [])
+    setPatternSummary(data.summary || '')
+    setPatternsLoading(false)
+  }
+
+  const shareTrade = async (trade: Trade) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const response = await fetch('/api/shares/public', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ tradeId: trade.id }),
+    })
+    const data = await response.json()
+    if (!response.ok) return alert(data.error || 'Share failed.')
+
+    const url = `${window.location.origin}${data.url}`
+    await navigator.clipboard.writeText(url)
+    alert(`Public link copied:\n${url}`)
+    if (userId) await loadTrades(userId)
+  }
+
   const totalPnl = trades.reduce((sum, trade) => sum + trade.pnl, 0)
   const winRate = trades.length ? Math.round((trades.filter((trade) => trade.pnl > 0).length / trades.length) * 100) : 0
   const isFree = profile.plan === 'free'
+  const todayKey = new Date().toISOString().slice(0, 10)
+  const monthKey = todayKey.slice(0, 7)
+  const todayPnl = trades.filter((trade) => trade.date === todayKey).reduce((sum, trade) => sum + trade.pnl, 0)
+  const monthPnl = trades.filter((trade) => trade.date?.startsWith(monthKey)).reduce((sum, trade) => sum + trade.pnl, 0)
+  const todayTrades = [...trades].filter((trade) => trade.date === todayKey).sort((a, b) => a.date.localeCompare(b.date))
+  let consecutiveLosses = 0
+  for (let index = todayTrades.length - 1; index >= 0; index -= 1) {
+    if (todayTrades[index].pnl < 0) consecutiveLosses += 1
+    else break
+  }
+  const warnings = [
+    goals?.max_consecutive_losses && consecutiveLosses >= goals.max_consecutive_losses
+      ? `⚠️ ${consecutiveLosses} consecutive losses today. Consider stopping.`
+      : '',
+    goals?.max_daily_loss && todayPnl <= -Math.abs(goals.max_daily_loss)
+      ? `⚠️ Daily loss limit reached (${todayPnl.toLocaleString()})`
+      : '',
+    goals?.monthly_target && goals.monthly_target > 0
+      ? `🎯 ${Math.max(0, Math.round((monthPnl / goals.monthly_target) * 100))}% of monthly goal achieved!`
+      : '',
+  ].filter(Boolean)
 
   return (
     <div className="min-h-screen bg-[#0f1117] text-white lg:flex">
@@ -323,9 +410,29 @@ export default function Home() {
             <span className="text-base">◫</span>
             {t.calendar}
           </Link>
+          <Link href="/groups" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">G</span>
+            Groups
+          </Link>
+          <Link href="/ranking" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">#</span>
+            Rankings
+          </Link>
+          <Link href="/goals" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">!</span>
+            목표
+          </Link>
+          <Link href="/import" className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">↑</span>
+            가져오기
+          </Link>
           <button onClick={() => scrollTo(coachRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
             <span className="text-base">◇</span>
             {t.coach}
+          </button>
+          <button onClick={() => scrollTo(patternsRef)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200">
+            <span className="text-base">P</span>
+            패턴 분석
           </button>
         </nav>
 
@@ -396,6 +503,18 @@ export default function Home() {
           <StatCard label={t.winRate} value={`${winRate}%`} tone={winRate >= 50 ? 'green' : 'red'} sublabel={t.closedTrades} />
           <StatCard label={t.totalPnl} value={`${totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString()}`} tone={totalPnl >= 0 ? 'green' : 'red'} sublabel="USD" className="col-span-2 lg:col-span-1" />
         </section>
+
+        {warnings.length > 0 && (
+          <section className="px-4 pb-5 sm:px-6 lg:px-8">
+            <div className="space-y-2">
+              {warnings.map((warning) => (
+                <div key={warning} className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  {warning}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section ref={formRef} className="px-4 pb-6 sm:px-6 lg:px-8">
           <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-4 sm:p-6">
@@ -495,6 +614,36 @@ export default function Home() {
           </div>
         </section>
 
+        <section ref={patternsRef} className="px-4 pb-6 sm:px-6 lg:px-8">
+          <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-4 sm:p-5">
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-200">패턴 분석</h2>
+                <p className="mt-1 text-sm text-slate-500">시간대, 요일, 감정, 종목별 거래 패턴을 AI가 분석합니다.</p>
+              </div>
+              <button onClick={analyzePatterns} disabled={patternsLoading} className="min-h-11 rounded-lg bg-amber-500 px-4 text-sm font-semibold text-black disabled:opacity-40">
+                {patternsLoading ? 'Analyzing...' : 'Run pattern analysis'}
+              </button>
+            </div>
+
+            {patternSummary && <p className="mb-4 rounded-lg bg-[#0f1117] p-4 text-sm leading-relaxed text-slate-400">{patternSummary}</p>}
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {(patternInsights.length ? patternInsights : [
+                { title: 'Best trading time', value: 'London session (08:00-12:00)', detail: 'Run analysis to calculate from your trades.' },
+                { title: 'Worst emotion', value: '급함', detail: 'Win rate will appear after analysis.' },
+                { title: 'Strongest day', value: 'Tuesday', detail: 'Win rate will appear after analysis.' },
+              ]).map((insight) => (
+                <div key={insight.title} className="rounded-lg border border-white/[0.06] bg-[#0f1117] p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-600">{insight.title}</div>
+                  <div className="mt-2 break-words text-lg font-bold text-slate-100">{insight.value}</div>
+                  <div className="mt-1 break-words text-sm text-slate-500">{insight.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section ref={listRef} className="px-4 pb-10 sm:px-6 lg:px-8">
           <div className="mb-4 flex items-center gap-2.5">
             <div className="h-4 w-1 rounded-full bg-amber-400" />
@@ -525,9 +674,10 @@ export default function Home() {
                 {selectedTrade?.id === trade.id && (
                   <div className="border-t border-white/[0.06] bg-[#0f1117]/60 px-4 py-4">
                     {trade.chart_image_url && <img src={trade.chart_image_url} alt={t.chartImage} className="mb-4 w-full rounded-lg border border-white/[0.08]" />}
-                    <div className="mb-4 grid grid-cols-2 gap-2">
+                    <div className="mb-4 grid grid-cols-3 gap-2">
                       <button onClick={() => handleEditClick(trade)} className="min-h-11 rounded-lg bg-amber-500/10 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20">{t.edit}</button>
                       <button onClick={(event) => void handleDeleteClick(event, trade)} className="min-h-11 rounded-lg bg-red-500/10 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20">{t.delete}</button>
+                      <button onClick={() => void shareTrade(trade)} className="min-h-11 rounded-lg bg-sky-500/10 text-sm font-medium text-sky-400 transition-colors hover:bg-sky-500/20">Share</button>
                     </div>
                     <button onClick={() => analyze(trade)} disabled={aiLoading || (isFree && profile.ai_credits <= 0)} className="mb-4 flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 text-sm font-medium text-amber-400 transition-all hover:bg-amber-500/10 hover:border-amber-500/50 disabled:cursor-not-allowed disabled:opacity-40">
                       {aiLoading ? t.analyzing : isFree ? `${t.aiAnalyze} (${profile.ai_credits} ${t.left})` : t.aiAnalyze}
