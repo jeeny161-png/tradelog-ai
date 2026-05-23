@@ -30,8 +30,6 @@ type DayBucket = {
   trades: Trade[]
 }
 
-const weekdays = ['월', '화', '수', '목', '금', '토', '일']
-
 export default function HistoryPage() {
   const { language } = useLanguage()
   const [tab, setTab] = useState<'list' | 'calendar'>('list')
@@ -191,43 +189,49 @@ export default function HistoryPage() {
             {!trades.length && <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-8 text-center text-sm text-slate-500">아직 기록된 거래가 없습니다.</div>}
           </section>
         ) : (
-          <section className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-4 sm:p-5">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-slate-100">{month.getFullYear()}년 {month.getMonth() + 1}월</h2>
-              <div className="flex gap-2">
-                <button onClick={() => changeMonth(-1)} className="min-h-11 rounded-xl bg-white/[0.06] px-4 text-sm font-semibold text-slate-200">이전</button>
-                <button onClick={() => changeMonth(1)} className="min-h-11 rounded-xl bg-white/[0.06] px-4 text-sm font-semibold text-slate-200">다음</button>
-              </div>
+          <section className="rounded-xl border border-[#1a1f2e] bg-[#0f1117] p-3 sm:p-5">
+            <div className="mb-5 flex items-center justify-center gap-5">
+              <button onClick={() => changeMonth(-1)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#1a1f2e] text-xl text-slate-300 hover:bg-[#1a1f2e]" aria-label="Previous month">‹</button>
+              <h2 className="min-w-36 text-center font-mono text-2xl font-bold text-slate-100 sm:text-3xl">
+                {month.getFullYear()}/{String(month.getMonth() + 1).padStart(2, '0')}
+              </h2>
+              <button onClick={() => changeMonth(1)} className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#1a1f2e] text-xl text-slate-300 hover:bg-[#1a1f2e]" aria-label="Next month">›</button>
             </div>
 
             <MonthSummary buckets={[...dayMap.values()]} />
 
-            <div className="mt-5 overflow-hidden rounded-xl border border-white/[0.06]">
-              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_56px] bg-[#0f1117] text-center text-[10px] font-semibold text-slate-500 sm:grid-cols-[repeat(7,minmax(0,1fr))_72px] sm:text-xs lg:grid-cols-[repeat(7,minmax(0,1fr))_80px]">
-                {weekdays.map((day) => <div key={day} className="px-1 py-3">{day}</div>)}
-                <div className="w-14 px-1 py-3 text-amber-400 sm:w-[72px] lg:w-20">주간</div>
+            <div className="mt-5 overflow-x-auto rounded-xl border border-[#1a1f2e]">
+              <div className="min-w-[720px]">
+              <div className="grid grid-cols-[repeat(7,minmax(86px,1fr))_86px] bg-[#0f1117] text-center text-[11px] font-semibold text-slate-500 sm:grid-cols-[repeat(7,minmax(96px,1fr))_96px] sm:text-xs lg:grid-cols-[repeat(7,minmax(0,1fr))_112px]">
+                {['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'].map((day) => <div key={day} className="border-r border-[#1a1f2e] px-1 py-3 last:border-r-0">{day}</div>)}
+                <div className="px-1 py-3 text-amber-400">주간 합계</div>
               </div>
               {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(0,1fr))_56px] border-t border-white/[0.06] sm:grid-cols-[repeat(7,minmax(0,1fr))_72px] lg:grid-cols-[repeat(7,minmax(0,1fr))_80px]">
+                <div key={weekIndex} className="grid grid-cols-[repeat(7,minmax(86px,1fr))_86px] border-t border-[#1a1f2e] sm:grid-cols-[repeat(7,minmax(96px,1fr))_96px] lg:grid-cols-[repeat(7,minmax(0,1fr))_112px]">
                   {week.days.map((day) => {
                     const bucket = day.date ? dayMap.get(day.date) : undefined
-                    const tone = !bucket ? 'bg-[#151926] text-slate-600' : bucket.pnl >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
+                    const isToday = day.date === new Date().toISOString().slice(0, 10)
                     return (
-                      <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`min-h-[60px] min-w-0 border-r border-white/[0.04] p-1.5 text-left sm:min-h-20 sm:p-2 lg:min-h-24 ${tone}`}>
-                        <div className="text-[10px] font-semibold sm:text-xs">{day.label}</div>
+                      <button key={day.key} disabled={!day.date} onClick={() => bucket && setSelectedDay(bucket)} className={`relative min-h-[70px] min-w-0 border-r border-[#1a1f2e] bg-[#0f1117] p-2 text-left transition-colors hover:bg-[#151926] sm:min-h-24 sm:p-3 ${isToday ? 'ring-1 ring-inset ring-amber-500/30' : ''}`}>
+                        <div className="flex min-w-0 items-center gap-1 text-[10px] font-semibold text-slate-500 sm:text-xs">
+                          <span>{day.label}</span>
+                          {bucket?.trades.some((trade) => trade.mt5_ticket) && <span className="text-amber-400">⇌</span>}
+                        </div>
                         {bucket && (
-                          <div className="mt-2 min-w-0 truncate whitespace-nowrap break-normal font-mono text-[10px] font-bold leading-tight sm:mt-3 sm:text-xs lg:text-sm">
+                          <div className={`absolute inset-x-2 top-1/2 -translate-y-1/2 truncate whitespace-nowrap break-normal text-center font-mono text-base font-bold leading-none sm:text-xl lg:text-2xl ${bucket.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
                             {formatSigned(bucket.pnl)}
                           </div>
                         )}
                       </button>
                     )
                   })}
-                  <div className={`flex min-h-[60px] w-14 min-w-0 items-center justify-center p-1 text-center font-mono text-[10px] font-bold sm:min-h-20 sm:w-[72px] sm:text-xs lg:min-h-24 lg:w-20 lg:text-sm ${week.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    <span className="min-w-0 truncate whitespace-nowrap break-normal">{formatSigned(week.pnl)}</span>
+                  <div className="flex min-h-[70px] min-w-0 flex-col items-center justify-center border-r border-[#1a1f2e] bg-[#0f1117] p-2 text-center sm:min-h-24">
+                    <div className="text-xs font-semibold text-slate-500">W{weekIndex + 1}</div>
+                    <span className={`mt-2 max-w-full truncate whitespace-nowrap break-normal font-mono text-xs font-bold sm:text-sm ${week.pnl >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>{formatSigned(week.pnl)}</span>
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           </section>
         )}
