@@ -26,7 +26,7 @@ export async function proxy(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser()
   console.log('[proxy] user:', user?.id ?? null, '| error:', error?.message ?? null)
 
-  const publicPaths = ['/login', '/logout', '/api/logout', '/pricing', '/api/payment/billing', '/api/payment/confirm']
+  const publicPaths = ['/login', '/logout', '/api/logout', '/api/mt5', '/pricing', '/api/payment/billing', '/api/payment/confirm']
   if (!user && !publicPaths.includes(request.nextUrl.pathname)) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
