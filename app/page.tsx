@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
-import { LanguageToggle, useLanguage } from '@/lib/i18n'
+import { LanguageToggle, emotionOptions, getEmotionLabel, useLanguage } from '@/lib/i18n'
 import { supabase } from '@/lib/supabase'
 
 type Trade = {
@@ -25,8 +25,6 @@ type Profile = {
   plan: 'free' | 'pro'
   ai_credits: number
 }
-
-const emotions = ['Calm', 'Confident', 'Focused', 'Rushed', 'Anxious', 'Revenge', 'Patient', 'Excited']
 
 async function uploadChart(file: File, uid: string): Promise<string | null> {
   const ext = file.name.split('.').pop() ?? 'png'
@@ -438,7 +436,11 @@ export default function Home() {
               </Field>
               <Field label={t.emotion}>
                 <select value={emotion} onChange={(event) => setEmotion(event.target.value)} className="field-input">
-                  {emotions.map((item) => <option key={item} className="bg-[#1a1f2e]">{item}</option>)}
+                  {emotionOptions.map((item) => (
+                    <option key={item.value} value={item.value} className="bg-[#1a1f2e]">
+                      {item[language]}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <Field label={t.tradeRationale} className="sm:col-span-2">
@@ -512,7 +514,7 @@ export default function Home() {
                   <div className="min-w-0 flex-1">
                     <div className="break-words text-sm font-medium text-slate-200">{trade.symbol}</div>
                     <div className="mt-0.5 break-words text-xs text-slate-600">
-                      {trade.date} · {trade.direction === 'L' ? t.long : t.short} · {trade.quantity} lot · {trade.emotion}
+                      {trade.date} · {trade.direction === 'L' ? t.long : t.short} · {trade.quantity} lot · {getEmotionLabel(trade.emotion, language)}
                     </div>
                   </div>
                   <div className={`shrink-0 break-all text-right font-mono text-sm font-bold ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>

@@ -163,6 +163,22 @@ export const copy = {
   },
 } as const
 
+export const emotionOptions = [
+  { value: 'Calm', en: 'Calm', ko: '차분' },
+  { value: 'Confident', en: 'Confident', ko: '자신감' },
+  { value: 'Focused', en: 'Focused', ko: '집중' },
+  { value: 'Rushed', en: 'Rushed', ko: '조급함' },
+  { value: 'Anxious', en: 'Anxious', ko: '불안' },
+  { value: 'Revenge', en: 'Revenge', ko: '복수심' },
+  { value: 'Patient', en: 'Patient', ko: '인내' },
+  { value: 'Excited', en: 'Excited', ko: '흥분' },
+] as const
+
+export function getEmotionLabel(value: string, language: Language) {
+  const option = emotionOptions.find((item) => item.value === value || item.ko === value || item.en === value)
+  return option ? option[language] : value
+}
+
 function getStoredLanguage(): Language {
   if (typeof window === 'undefined') return 'en'
 
