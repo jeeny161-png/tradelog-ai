@@ -4,6 +4,16 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+type FeedbackItem = {
+  id: string
+  user_email: string | null
+  category: string
+  message: string
+  rating: number | null
+  resolved: boolean
+  created_at: string
+}
+
 const ADMIN_EMAIL = 'jeeny161@gmail.com'
 
 type AdminUser = {
@@ -39,6 +49,8 @@ type AdminStats = {
   signups: { date: string; count: number }[]
 }
 
+const FEEDBACK_CATEGORIES = ['all', '버그 신고', '기능 제안', '칭찬', '기타'] as const
+
 export default function AdminPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -48,6 +60,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [emailSubject, setEmailSubject] = useState('TradeLog AI 안내')
   const [emailMessage, setEmailMessage] = useState('')
+  const [adminTab, setAdminTab] = useState<'users' | 'feedback'>('users')
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>([])
+  const [feedbackCategory, setFeedbackCategory] = useState<string>('all')
+  const [feedbackResolved, setFeedbackResolved] = useState<string>('false')
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
 
   const adminFetch = useCallback(async (body?: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -112,6 +129,37 @@ export default function AdminPage() {
     }
   }
 
+  const loadFeedback = useCallback(async () => {
+    setFeedbackLoading(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    const params = new URLSearchParams()
+    if (feedbackCategory !== 'all') params.set('category', feedbackCategory)
+    params.set('resolved', feedbackResolved)
+    const res = await fetch(`/api/feedback?${params}`, {
+      headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+    })
+    const data = await res.json()
+    setFeedbackItems(data.feedback || [])
+    setFeedbackLoading(false)
+  }, [feedbackCategory, feedbackResolved])
+
+  const toggleResolved = async (item: FeedbackItem) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    await fetch('/api/feedback', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ id: item.id, resolved: !item.resolved }),
+    })
+    await loadFeedback()
+  }
+
+  useEffect(() => {
+    if (userEmail === ADMIN_EMAIL && adminTab === 'feedback') void loadFeedback()
+  }, [userEmail, adminTab, loadFeedback])
+
   const maxSignup = useMemo(() => Math.max(1, ...(stats?.signups || []).map((item) => item.count)), [stats])
 
   if (loading) {
@@ -138,7 +186,13 @@ export default function AdminPage() {
             <h1 className="text-2xl font-bold">Admin Dashboard</h1>
             <p className="mt-1 text-sm text-slate-500">Service-role powered user, trade, email, and site analytics.</p>
           </div>
-          <button onClick={() => void loadDashboard()} className="min-h-11 rounded-lg border border-white/[0.08] px-4 text-sm text-slate-300">Refresh</button>
+          <button onClick={() => void (adminTab === 'users' ? loadDashboard() : loadFeedback())} className="min-h-11 rounded-lg border border-white/[0.08] px-4 text-sm text-slate-300">Refresh</button>
+        </div>
+
+        {/* Admin tabs */}
+        <div className="mb-6 grid grid-cols-2 rounded-xl border border-white/[0.06] bg-[#1a1f2e] p-1 sm:w-80">
+          <button onClick={() => setAdminTab('users')} className={`min-h-11 rounded-lg text-sm font-bold transition-colors ${adminTab === 'users' ? 'bg-amber-500 text-black' : 'text-slate-400 hover:text-slate-200'}`}>👥 유저 관리</button>
+          <button onClick={() => setAdminTab('feedback')} className={`min-h-11 rounded-lg text-sm font-bold transition-colors ${adminTab === 'feedback' ? 'bg-amber-500 text-black' : 'text-slate-400 hover:text-slate-200'}`}>💬 피드백</button>
         </div>
 
         {stats && (
@@ -164,6 +218,76 @@ export default function AdminPage() {
           </>
         )}
 
+        {adminTab === 'feedback' && (
+          <section className="space-y-4">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap gap-2">
+                {FEEDBACK_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => { setFeedbackCategory(cat); void loadFeedback() }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${feedbackCategory === cat ? 'bg-amber-500 text-black' : 'bg-white/[0.06] text-slate-400 hover:bg-white/[0.1]'}`}
+                  >
+                    {cat === 'all' ? '전체' : cat}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                {[['false', '미해결'], ['true', '해결됨'], ['', '전체']] .map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => { setFeedbackResolved(val); void loadFeedback() }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${feedbackResolved === val ? 'bg-slate-600 text-white' : 'bg-white/[0.04] text-slate-500 hover:bg-white/[0.08]'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {feedbackLoading ? (
+              <div className="py-12 text-center text-sm text-slate-500">불러오는 중...</div>
+            ) : feedbackItems.length === 0 ? (
+              <div className="rounded-xl border border-white/[0.06] bg-[#1a1f2e] py-12 text-center text-sm text-slate-500">피드백이 없습니다.</div>
+            ) : (
+              <div className="space-y-3">
+                {feedbackItems.map((item) => (
+                  <div key={item.id} className={`rounded-xl border bg-[#1a1f2e] p-4 transition-opacity ${item.resolved ? 'border-white/[0.04] opacity-60' : 'border-white/[0.06]'}`}>
+                    <div className="mb-3 flex flex-wrap items-start gap-3">
+                      <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                          item.category === '버그 신고' ? 'bg-red-500/15 text-red-400' :
+                          item.category === '기능 제안' ? 'bg-sky-500/15 text-sky-400' :
+                          item.category === '칭찬' ? 'bg-emerald-500/15 text-emerald-400' :
+                          'bg-white/[0.06] text-slate-400'
+                        }`}>{item.category}</span>
+                        {item.rating && (
+                          <span className="text-xs text-amber-400">{'⭐'.repeat(item.rating)}</span>
+                        )}
+                        <span className="truncate text-xs text-slate-500">{item.user_email ?? '익명'}</span>
+                        <span className="text-xs text-slate-600">{new Date(item.created_at).toLocaleString('ko-KR')}</span>
+                      </div>
+                      <button
+                        onClick={() => void toggleResolved(item)}
+                        className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          item.resolved
+                            ? 'bg-white/[0.06] text-slate-400 hover:bg-white/[0.1]'
+                            : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        {item.resolved ? '↩ 미해결로' : '✓ 해결됨'}
+                      </button>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{item.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {adminTab === 'users' && (
         <section className="grid gap-5 lg:grid-cols-[420px_1fr]">
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#1a1f2e]">
             <div className="border-b border-white/[0.06] p-4 text-sm font-semibold">Registered users</div>
@@ -227,6 +351,7 @@ export default function AdminPage() {
             )}
           </div>
         </section>
+        )}
       </div>
     </main>
   )

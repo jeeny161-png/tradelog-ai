@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
+import FeedbackWidget from './FeedbackWidget'
 
 type Profile = {
   plan: 'free' | 'pro'
@@ -132,6 +133,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
         )}
         {children}
       </div>
+
+      <FeedbackWidget />
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-[#111522]/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
         <div className="grid h-[60px] grid-cols-5 gap-1">
