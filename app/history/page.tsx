@@ -39,6 +39,11 @@ export default function HistoryPage() {
   const [selectedDay, setSelectedDay] = useState<DayBucket | null>(null)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null)
+  const [editSymbol, setEditSymbol] = useState('')
+  const [editDirection, setEditDirection] = useState<'L' | 'S'>('L')
+  const [editEntryPrice, setEditEntryPrice] = useState('')
+  const [editExitPrice, setEditExitPrice] = useState('')
+  const [editQty, setEditQty] = useState('')
   const [editEmotion, setEditEmotion] = useState('Calm')
   const [editRationale, setEditRationale] = useState('')
   const [editNotes, setEditNotes] = useState('')
@@ -118,6 +123,11 @@ export default function HistoryPage() {
 
   const openEdit = (trade: Trade) => {
     setEditingTrade(trade)
+    setEditSymbol(trade.symbol || '')
+    setEditDirection(trade.direction || 'L')
+    setEditEntryPrice(String(trade.entry_price ?? ''))
+    setEditExitPrice(String(trade.exit_price ?? ''))
+    setEditQty(String(trade.quantity ?? ''))
     setEditEmotion(trade.emotion || 'Calm')
     setEditRationale(trade.rationale || '')
     setEditNotes(trade.notes || '')
@@ -129,14 +139,30 @@ export default function HistoryPage() {
     if (!editingTrade || !userId) return
     setSavingEdit(true)
     const chartUrl = editChartFile ? await uploadChart(editChartFile, userId) : editChartPreview || null
+    const isMt5 = Boolean(editingTrade.mt5_ticket)
+
+    // MT5 trades: only allow editing retrospective fields
+    // Non-MT5 trades: allow editing all fields
+    const updates: Record<string, unknown> = {
+      emotion: editEmotion,
+      rationale: editRationale,
+      notes: editNotes,
+      chart_image_url: chartUrl,
+    }
+
+    if (!isMt5) {
+      updates.symbol = editSymbol.trim().toUpperCase()
+      updates.direction = editDirection
+      updates.entry_price = Number(editEntryPrice)
+      updates.exit_price = Number(editExitPrice)
+      updates.quantity = Number(editQty)
+      const pnl = (Number(editExitPrice) - Number(editEntryPrice)) * (editDirection === 'L' ? 1 : -1) * Number(editQty)
+      updates.pnl = Math.round(pnl * 100) / 100
+    }
+
     const { error } = await supabase
       .from('trades')
-      .update({
-        emotion: editEmotion,
-        rationale: editRationale,
-        notes: editNotes,
-        chart_image_url: chartUrl,
-      })
+      .update(updates)
       .eq('id', editingTrade.id)
       .eq('user_id', userId)
     setSavingEdit(false)
@@ -297,21 +323,62 @@ export default function HistoryPage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-100">거래 편집</h3>
-                <p className="mt-1 text-sm text-slate-500">MT5 거래의 가격, 종목, 손익은 잠겨 있고 복기 정보만 수정할 수 있습니다.</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {editingTrade.mt5_ticket
+                    ? `MT5 티켓 #${editingTrade.mt5_ticket} · 감정, 매매 근거, 메모, 차트를 편집할 수 있습니다.`
+                    : '모든 항목을 자유롭게 편집할 수 있습니다.'}
+                </p>
               </div>
               <button onClick={() => setEditingTrade(null)} className="min-h-11 rounded-xl px-3 text-slate-400">닫기</button>
             </div>
 
-            <div className="mb-5 grid gap-3 sm:grid-cols-2">
-              <ReadOnlyField label="종목" value={editingTrade.symbol} />
-              <ReadOnlyField label="방향" value={editingTrade.direction} />
-              <ReadOnlyField label="진입가" value={String(editingTrade.entry_price)} />
-              <ReadOnlyField label="청산가" value={String(editingTrade.exit_price)} />
-              <ReadOnlyField label="순손익" value={formatMoney(editingTrade.pnl)} />
-              <ReadOnlyField label="MT5 Ticket" value={editingTrade.mt5_ticket || '-'} />
-            </div>
-
             <div className="grid gap-4">
+              {/* Price / trade fields: editable for non-MT5, read-only for MT5 */}
+              {editingTrade.mt5_ticket ? (
+                <div className="grid gap-3 rounded-xl border border-white/[0.04] bg-[#0f1117] p-3 sm:grid-cols-3">
+                  <div>
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">종목</div>
+                    <div className="font-semibold text-slate-300">{editingTrade.symbol}</div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">방향 · 수량</div>
+                    <div className={`font-semibold ${editingTrade.direction === 'L' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {editingTrade.direction === 'L' ? 'Long' : 'Short'} · {editingTrade.quantity} lot
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">진입 → 청산</div>
+                    <div className="font-mono text-sm text-slate-300">{editingTrade.entry_price} → {editingTrade.exit_price}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-500">종목</span>
+                    <input className="field-input" value={editSymbol} onChange={(e) => setEditSymbol(e.target.value)} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-500">방향</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => setEditDirection('L')} className={`min-h-11 rounded-xl text-sm font-semibold ${editDirection === 'L' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[#0f1117] text-slate-400'}`}>Long</button>
+                      <button onClick={() => setEditDirection('S')} className={`min-h-11 rounded-xl text-sm font-semibold ${editDirection === 'S' ? 'bg-red-500/20 text-red-400' : 'bg-[#0f1117] text-slate-400'}`}>Short</button>
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-500">진입가</span>
+                    <input className="field-input" type="number" value={editEntryPrice} onChange={(e) => setEditEntryPrice(e.target.value)} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-500">청산가</span>
+                    <input className="field-input" type="number" value={editExitPrice} onChange={(e) => setEditExitPrice(e.target.value)} />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-500">수량 (lot)</span>
+                    <input className="field-input" type="number" step="0.01" value={editQty} onChange={(e) => setEditQty(e.target.value)} />
+                  </label>
+                </div>
+              )}
+
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-slate-500">감정</span>
                 <select className="field-input" value={editEmotion} onChange={(event) => setEditEmotion(event.target.value)}>
@@ -391,14 +458,6 @@ function PnlBreakdown({ trade, compact = false }: { trade: Trade; compact?: bool
   )
 }
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-white/[0.06] bg-[#0f1117] p-3">
-      <div className="mb-1 text-xs text-slate-500">🔒 {label}</div>
-      <div className="break-words font-semibold text-slate-200">{value}</div>
-    </div>
-  )
-}
 
 async function uploadChart(file: File, uid: string) {
   const ext = file.name.split('.').pop() || 'png'

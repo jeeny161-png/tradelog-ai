@@ -3,7 +3,7 @@
 //| Sends closed MT5 deal data to TradeLog AI as JSON.               |
 //+------------------------------------------------------------------+
 #property strict
-#property version "1.02"
+#property version "1.03"
 
 input string InpApiKey = "PASTE_YOUR_TRADELOG_AI_API_KEY";
 input string InpApiUrl = "https://tradelog-ai-one.vercel.app/api/mt5";
@@ -16,7 +16,7 @@ int OnInit()
       Print("TradeLog AI warning: InpApiUrl should be https://tradelog-ai-one.vercel.app/api/mt5");
 
    ArrayResize(sent_tickets, 0);
-   Print("TradeLog AI Bridge started");
+   Print("TradeLog AI Bridge v1.03 started");
    Print("Allow this WebRequest URL in MT5 options: https://tradelog-ai-one.vercel.app");
    Print("POST endpoint: ", InpApiUrl);
    return(INIT_SUCCEEDED);
@@ -45,24 +45,66 @@ void OnTradeTransaction(const MqlTradeTransaction& trans, const MqlTradeRequest&
 
 string BuildDealJson(ulong ticket)
 {
-   string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
-   long dealType = HistoryDealGetInteger(ticket, DEAL_TYPE);
-   double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
-   double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
-   double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT);
-   double swap = HistoryDealGetDouble(ticket, DEAL_SWAP);
-   double commission = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
-   datetime dealTime = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+   // --- Closing deal fields ---
+   string symbol       = HistoryDealGetString(ticket, DEAL_SYMBOL);
+   long   closeDealType= HistoryDealGetInteger(ticket, DEAL_TYPE);  // Type of the CLOSING deal
+   double volume       = HistoryDealGetDouble(ticket, DEAL_VOLUME);
+   double exitPrice    = HistoryDealGetDouble(ticket, DEAL_PRICE);  // Execution price of closing
+   double profit       = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+   double swap         = HistoryDealGetDouble(ticket, DEAL_SWAP);
+   double commission   = HistoryDealGetDouble(ticket, DEAL_COMMISSION);
+   datetime dealTime   = (datetime)HistoryDealGetInteger(ticket, DEAL_TIME);
+   long   positionId   = HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
 
-   string direction = (dealType == DEAL_TYPE_SELL || dealType == DEAL_TYPE_SELL_CANCELED) ? "SELL" : "BUY";
+   // --- Find the ENTRY deal for this position to get correct direction & entry price ---
+   // Direction MUST come from the entry deal, NOT the closing deal.
+   //   Entry DEAL_TYPE_BUY  (0) -> Long  position -> direction "L"
+   //   Entry DEAL_TYPE_SELL (1) -> Short position -> direction "S"
+   double entryPrice    = exitPrice;   // fallback: use close price if entry not found
+   long   entryDealType = -1;
+
+   if(HistorySelectByPosition(positionId))
+   {
+      int n = HistoryDealsTotal();
+      for(int i = 0; i < n; i++)
+      {
+         ulong dealTicket = HistoryDealGetTicket(i);
+         if(HistoryDealGetInteger(dealTicket, DEAL_ENTRY) == DEAL_ENTRY_IN)
+         {
+            entryDealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+            entryPrice    = HistoryDealGetDouble(dealTicket, DEAL_PRICE);
+            break;
+         }
+      }
+   }
+
+   // --- Direction from ENTRY deal type ---
+   string direction;
+   if(entryDealType == DEAL_TYPE_BUY)
+      direction = "L";                  // Long:  entry was Buy
+   else if(entryDealType == DEAL_TYPE_SELL)
+      direction = "S";                  // Short: entry was Sell
+   else
+   {
+      // Fallback (entry deal not found): invert the CLOSING deal type.
+      // Closing SELL = position was Long; Closing BUY = position was Short.
+      direction = (closeDealType == DEAL_TYPE_BUY) ? "S" : "L";
+      Print("TradeLog AI: entry deal not found for position ", positionId,
+            ", using fallback direction from close deal (", direction, ")");
+   }
+
+   Print("TradeLog AI: ticket=", ticket, " posId=", positionId,
+         " entryType=", entryDealType, " closeType=", closeDealType,
+         " direction=", direction, " entry=", entryPrice, " exit=", exitPrice);
+
    string json = "{";
    json += "\"api_key\":\"" + JsonEscape(InpApiKey) + "\",";
    json += "\"ticket\":\"" + (string)ticket + "\",";
    json += "\"deal_entry\":\"DEAL_ENTRY_OUT\",";
    json += "\"symbol\":\"" + JsonEscape(symbol) + "\",";
    json += "\"direction\":\"" + direction + "\",";
-   json += "\"entry_price\":" + DoubleToString(price, _Digits) + ",";
-   json += "\"exit_price\":" + DoubleToString(price, _Digits) + ",";
+   json += "\"entry_price\":" + DoubleToString(entryPrice, _Digits) + ",";
+   json += "\"exit_price\":" + DoubleToString(exitPrice, _Digits) + ",";
    json += "\"volume\":" + DoubleToString(volume, 2) + ",";
    json += "\"profit\":" + DoubleToString(profit, 2) + ",";
    json += "\"swap\":" + DoubleToString(swap, 2) + ",";
