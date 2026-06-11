@@ -23,7 +23,7 @@ export default function LoginPage() {
       else setMessage('가입 완료! 이메일을 확인하고 로그인하세요.')
     } else if (mode === 'reset') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`
+        redirectTo: `${window.location.origin}/auth/callback`
       })
       if (error) setMessage('오류: ' + error.message)
       else setMessage('비밀번호 재설정 링크를 이메일로 보냈습니다. 받은편지함을 확인하세요.')
