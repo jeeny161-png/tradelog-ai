@@ -15,6 +15,7 @@ type Profile = {
 const navItems = [
   { href: '/', label: '홈', icon: '🏠' },
   { href: '/history', label: '기록', icon: '📋' },
+  { href: '/mtf', label: 'MTF', icon: '📊' },
   { href: '/analysis', label: 'AI 분석', icon: '🤖' },
   { href: '/community', label: '커뮤니티', icon: '👥' },
   { href: '/settings', label: '설정', icon: '⚙️' },
@@ -136,20 +137,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       <FeedbackWidget />
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-[#111522]/95 px-2 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
-        <div className="grid h-[60px] grid-cols-5 gap-1">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-[#111522]/95 px-1 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur lg:hidden">
+        <div className="grid h-[60px] grid-cols-6 gap-0.5">
           {navItems.map((item) => {
             const active = activeHref === item.href
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex min-h-11 flex-col items-center justify-center rounded-xl px-1 text-[11px] font-semibold transition-colors ${
+                className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl px-0.5 text-[10px] font-semibold transition-colors ${
                   active ? 'bg-amber-500/15 text-amber-400' : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-100'
                 }`}
               >
                 <span className="text-base leading-none">{item.icon}</span>
-                <span className="mt-1 truncate">{item.label}</span>
+                <span className="mt-1 w-full truncate text-center">{item.label}</span>
               </Link>
             )
           })}
