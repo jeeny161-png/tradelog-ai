@@ -6,11 +6,12 @@ import {
   CAPTCHA_WAITING_MESSAGE,
   getCaptchaAuthOptions,
   getCaptchaSubmissionError,
+  resolveTurnstileSiteKey,
 } from '@/lib/auth-captcha'
 import { getAuthErrorMessage, getPasswordValidationError, PASSWORD_MIN_LENGTH } from '@/lib/auth-errors'
 
 type Mode = 'login' | 'signup' | 'reset'
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+const TURNSTILE_SITE_KEY = resolveTurnstileSiteKey(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY)
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')

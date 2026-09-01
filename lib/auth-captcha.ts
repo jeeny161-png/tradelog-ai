@@ -2,6 +2,12 @@ export const CAPTCHA_WAITING_MESSAGE = '보안 확인 중입니다. 잠시 후 �
 export const CAPTCHA_CONFIGURATION_MESSAGE =
   '보안 확인 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.'
 
+const DEPLOYED_TURNSTILE_SITE_KEY = '0x4AAAAAAEj7SqW5qIg0PpGN'
+
+export function resolveTurnstileSiteKey(environmentSiteKey: string | undefined) {
+  return environmentSiteKey || DEPLOYED_TURNSTILE_SITE_KEY
+}
+
 export function getCaptchaAuthOptions(captchaToken: string) {
   return { captchaToken }
 }

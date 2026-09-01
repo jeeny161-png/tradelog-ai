@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   getCaptchaAuthOptions,
   getCaptchaSubmissionError,
+  resolveTurnstileSiteKey,
 } from '../lib/auth-captcha.ts'
 
 test('auth requests include the verified Turnstile token', () => {
@@ -28,4 +29,17 @@ test('missing public site key is reported as a configuration problem', () => {
 
 test('verified Turnstile state allows auth submission', () => {
   assert.equal(getCaptchaSubmissionError('site-key', 'verified-token'), null)
+})
+
+test('deployed public key keeps Turnstile available when the Vercel variable is missing', () => {
+  const siteKey = resolveTurnstileSiteKey(undefined)
+
+  assert.equal(
+    getCaptchaSubmissionError(siteKey, 'verified-token'),
+    null,
+  )
+})
+
+test('Vercel public key overrides the deployed fallback', () => {
+  assert.equal(resolveTurnstileSiteKey('environment-site-key'), 'environment-site-key')
 })
