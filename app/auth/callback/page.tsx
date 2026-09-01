@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getAuthErrorMessage, getPasswordValidationError, PASSWORD_MIN_LENGTH } from '@/lib/auth-errors'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -35,8 +36,8 @@ export default function AuthCallbackPage() {
 
   const handleSubmit = async () => {
     setError('')
-    if (!password) { setError('새 비밀번호를 입력해주세요.'); return }
-    if (password.length < 6) { setError('비밀번호는 6자 이상이어야 합니다.'); return }
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) { setError(passwordError); return }
     if (password !== confirm) { setError('비밀번호가 일치하지 않습니다.'); return }
 
     setSubmitting(true)
@@ -44,7 +45,7 @@ export default function AuthCallbackPage() {
     setSubmitting(false)
 
     if (updateError) {
-      setError(updateError.message)
+      setError(getAuthErrorMessage(updateError, 'update-password'))
       return
     }
 
@@ -81,7 +82,7 @@ export default function AuthCallbackPage() {
           ) : (
             <>
               <h1 className="mb-1 text-lg font-bold text-slate-100">새 비밀번호 설정</h1>
-              <p className="mb-6 text-sm text-slate-500">6자 이상의 새 비밀번호를 입력해주세요.</p>
+              <p className="mb-6 text-sm text-slate-500">{PASSWORD_MIN_LENGTH}자 이상의 새 비밀번호를 입력해주세요.</p>
 
               <div className="space-y-4">
                 <label className="block">
@@ -92,6 +93,8 @@ export default function AuthCallbackPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
                     placeholder="••••••••"
+                    minLength={PASSWORD_MIN_LENGTH}
+                    autoComplete="new-password"
                     className="w-full rounded-xl border border-white/[0.08] bg-[#0f1117] px-4 py-3 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30"
                   />
                 </label>
@@ -104,6 +107,8 @@ export default function AuthCallbackPage() {
                     onChange={(e) => setConfirm(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit() }}
                     placeholder="••••••••"
+                    minLength={PASSWORD_MIN_LENGTH}
+                    autoComplete="new-password"
                     className="w-full rounded-xl border border-white/[0.08] bg-[#0f1117] px-4 py-3 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30"
                   />
                 </label>
